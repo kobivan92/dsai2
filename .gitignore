@@ -44,4 +44,9 @@ instance/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Project specific
+uploads/
+file_cache/
+*.zip 
