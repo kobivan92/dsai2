@@ -26,8 +26,7 @@ def evaluate_model_bias(df: pd.DataFrame,
     
     # Auto-select features
     if features is None:
-        exclude = {target_col, protected_attr,
-                   }
+        exclude = {target_col, protected_attr}
         features = [c for c in df.columns if c not in exclude]
     
     X = data[features]
@@ -70,11 +69,15 @@ def evaluate_model_bias(df: pd.DataFrame,
     y_pred = model.predict(X_test)
     
     # Overall report
-    overall = pd.DataFrame(
-        classification_report(y_test, y_pred, target_names=class_names, output_dict=True)
-    ).transpose()[['precision','recall','f1-score']]
-    print("=== Overall Classification Report ===")
-    print(overall)
+    overall_dict = classification_report(y_test, y_pred, target_names=class_names, output_dict=True)
+    overall = {}
+    for cls in class_names:
+        if cls in overall_dict:
+            overall[cls] = {
+                'precision': overall_dict[cls]['precision'],
+                'recall': overall_dict[cls]['recall'],
+                'f1-score': overall_dict[cls]['f1-score']
+            }
     
     # Group-wise report
     rows = []
@@ -87,20 +90,18 @@ def evaluate_model_bias(df: pd.DataFrame,
             labels=classes, target_names=class_names, output_dict=True
         )
         for cls_name in class_names:
-            cls_metrics = grp_dict.get(cls_name, {})
-            rows.append({
-                protected_attr: grp,
-                'class': cls_name,
-                'precision': cls_metrics.get('precision', 0.0),
-                'recall': cls_metrics.get('recall', 0.0),
-                'support': cls_metrics.get('support', 0)
-            })
-    group_report = pd.DataFrame(rows)
-    print(f"\n=== Metrics by {protected_attr} and Class ===")
-    
+            if cls_name in grp_dict:
+                cls_metrics = grp_dict[cls_name]
+                rows.append({
+                    protected_attr: grp,
+                    'class': cls_name,
+                    'precision': cls_metrics['precision'],
+                    'recall': cls_metrics['recall'],
+                    'support': cls_metrics['support']
+                })
     
     return {
-        'overall': overall.to_dict(),
+        'overall': overall,
         'group_report': rows,
         'class_names': class_names.tolist()
     }

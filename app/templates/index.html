@@ -129,9 +129,9 @@ function displayResults(results) {
                         .map(([cls, metrics]) => `
                             <tr>
                                 <td>${cls}</td>
-                                <td>${metrics.precision?.toFixed(3) || 'N/A'}</td>
-                                <td>${metrics.recall?.toFixed(3) || 'N/A'}</td>
-                                <td>${metrics['f1-score']?.toFixed(3) || 'N/A'}</td>
+                                <td>${metrics.precision.toFixed(3)}</td>
+                                <td>${metrics.recall.toFixed(3)}</td>
+                                <td>${metrics['f1-score'].toFixed(3)}</td>
                             </tr>
                         `).join('')}
                 </tbody>
@@ -155,11 +155,11 @@ function displayResults(results) {
                 <tbody>
                     ${result.group_report.map(row => `
                         <tr>
-                            <td>${row[attr] || 'N/A'}</td>
-                            <td>${row.class || 'N/A'}</td>
-                            <td>${row.precision?.toFixed(3) || 'N/A'}</td>
-                            <td>${row.recall?.toFixed(3) || 'N/A'}</td>
-                            <td>${row.support || 'N/A'}</td>
+                            <td>${row[attr]}</td>
+                            <td>${row.class}</td>
+                            <td>${row.precision.toFixed(3)}</td>
+                            <td>${row.recall.toFixed(3)}</td>
+                            <td>${row.support}</td>
                         </tr>
                     `).join('')}
                 </tbody>

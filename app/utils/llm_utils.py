@@ -97,7 +97,7 @@ Target variable:
 Top 10 features most correlated with the target (formatted as variable=correlation):
 {corr_snippet}
 
-Please respond with **only** the column names that should be excluded due to high dependence on the target or based on contextual irrelevance to the classification task (e.g., generated IDs, latitude/longitude, timestamps).Protected or bias-related features should not be excluded.Return the column names separated by commas—no additional text.
+Please respond with **only** the column names that should be excluded due to high dependence on the target.Protected or bias-related features should not be excluded.Return the column names separated by commas—no additional text.
 """.strip()
     
     payload3 = {
