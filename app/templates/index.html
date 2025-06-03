@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-4">Bias Analysis Tool</h1>
+
+<form id="analysisForm" class="mb-4">
+    <div class="mb-3">
+        <label for="file" class="form-label">CSV File</label>
+        <input type="file" class="form-control" id="file" name="file" accept=".csv" required>
+        <div id="fileInfo" class="file-info"></div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="columns_description" class="form-label">Columns Description</label>
+        <textarea class="form-control" id="columns_description" name="columns_description" rows="4" required></textarea>
+        <div class="form-text">Describe the columns in your dataset for the LLM to understand.</div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <label for="n_rows" class="form-label">Number of Rows</label>
+            <input type="number" class="form-control" id="n_rows" name="n_rows" value="10000" min="0">
+            <div class="form-text">0 for all rows</div>
+        </div>
+        
+        <div class="col-md-4 mb-3">
+            <label for="test_size" class="form-label">Test Size</label>
+            <input type="number" class="form-control" id="test_size" name="test_size" value="0.3" min="0.1" max="0.9" step="0.1">
+        </div>
+        
+        <div class="col-md-4 mb-3">
+            <label for="max_iter" class="form-label">Max Iterations</label>
+            <input type="number" class="form-control" id="max_iter" name="max_iter" value="1000" min="100">
+        </div>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Analyze</button>
+</form>
+
+<div id="loading" class="loading">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2">Analyzing data...</p>
+</div>
+
+<div id="error" class="error alert alert-danger"></div>
+
+<div id="recommendations" class="recommendations">
+    <h3>LLM Recommendations</h3>
+    <div class="mb-3">
+        <strong>Target Column:</strong>
+        <span id="targetColumn"></span>
+    </div>
+    <div class="mb-3">
+        <strong>Protected Attributes:</strong>
+        <ul id="protectedAttributes"></ul>
+    </div>
+    <div class="mb-3">
+        <strong>Excluded Columns:</strong>
+        <ul id="excludedColumns"></ul>
+    </div>
+    <div>
+        <strong>Top Correlated Features:</strong>
+        <pre id="correlations" style="background-color: #f8f9fa; padding: 10px; border-radius: 4px;"></pre>
+    </div>
+</div>
+
+<div id="results" class="results">
+    <h2>Analysis Results</h2>
+    <div id="resultsContent"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Function to update file info display
+function updateFileInfo(message, isCached = false) {
+    const fileInfo = document.getElementById('fileInfo');
+    fileInfo.style.display = 'block';
+    fileInfo.innerHTML = message;
+    fileInfo.className = `file-info ${isCached ? 'alert alert-info' : 'alert alert-success'}`;
+}
+
+// Function to display LLM recommendations
+function displayRecommendations(recommendations) {
+    document.getElementById('targetColumn').textContent = recommendations.target_column;
+    
+    const protectedAttrsList = document.getElementById('protectedAttributes');
+    protectedAttrsList.innerHTML = recommendations.protected_columns
+        .split(',')
+        .map(attr => `<li>${attr.trim()}</li>`)
+        .join('');
+    
+    const excludedColsList = document.getElementById('excludedColumns');
+    excludedColsList.innerHTML = recommendations.excluded_columns
+        .split(',')
+        .map(col => `<li>${col.trim()}</li>`)
+        .join('');
+    
+    document.getElementById('correlations').textContent = recommendations.correlations;
+    document.getElementById('recommendations').style.display = 'block';
+}
+
+// Function to display analysis results
+function displayResults(results) {
+    const resultsContent = document.getElementById('resultsContent');
+    resultsContent.innerHTML = '';
+    
+    for (const [attr, result] of Object.entries(results)) {
+        const attrDiv = document.createElement('div');
+        attrDiv.className = 'mb-4';
+        
+        // Overall metrics
+        const overallDiv = document.createElement('div');
+        overallDiv.innerHTML = `
+            <h3>${attr} - Overall Metrics</h3>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1-Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(result.overall)
+                        .map(([cls, metrics]) => `
+                            <tr>
+                                <td>${cls}</td>
+                                <td>${metrics.precision?.toFixed(3) || 'N/A'}</td>
+                                <td>${metrics.recall?.toFixed(3) || 'N/A'}</td>
+                                <td>${metrics['f1-score']?.toFixed(3) || 'N/A'}</td>
+                            </tr>
+                        `).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        // Group-wise metrics
+        const groupDiv = document.createElement('div');
+        groupDiv.innerHTML = `
+            <h3>${attr} - Group-wise Metrics</h3>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Group</th>
+                        <th>Class</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>Support</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${result.group_report.map(row => `
+                        <tr>
+                            <td>${row[attr] || 'N/A'}</td>
+                            <td>${row.class || 'N/A'}</td>
+                            <td>${row.precision?.toFixed(3) || 'N/A'}</td>
+                            <td>${row.recall?.toFixed(3) || 'N/A'}</td>
+                            <td>${row.support || 'N/A'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        attrDiv.appendChild(overallDiv);
+        attrDiv.appendChild(groupDiv);
+        resultsContent.appendChild(attrDiv);
+    }
+    
+    document.getElementById('results').style.display = 'block';
+}
+
+// Event Listeners
+document.getElementById('file').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        updateFileInfo(`Selected file: ${file.name}`);
+    }
+});
+
+document.getElementById('analysisForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    // Show loading, hide results and error
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('recommendations').style.display = 'none';
+    
+    try {
+        const response = await fetch('/analyze', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'error') {
+            throw new Error(data.message);
+        }
+        
+        // Update file info to show if cached
+        const file = document.getElementById('file').files[0];
+        updateFileInfo(`Using file: ${file.name}${data.is_cached ? ' (cached)' : ''}`, data.is_cached);
+        
+        // Display recommendations and results
+        displayRecommendations(data.llm_recommendations);
+        displayResults(data.results);
+        
+    } catch (error) {
+        document.getElementById('error').textContent = error.message;
+        document.getElementById('error').style.display = 'block';
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+});
+</script>
+{% endblock %} 
