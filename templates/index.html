@@ -233,9 +233,17 @@
                             </tbody>
                         </table>
                     `;
-                    
+
+                    // SHAP waterfall plot
+                    const shapDiv = document.createElement('div');
+                    shapDiv.innerHTML = `
+                        <h3>${attr} - SHAP Waterfall</h3>
+                        ${result.shap_html}
+                    `;
+
                     attrDiv.appendChild(overallDiv);
                     attrDiv.appendChild(groupDiv);
+                    attrDiv.appendChild(shapDiv);
                     resultsContent.appendChild(attrDiv);
                 }
                 

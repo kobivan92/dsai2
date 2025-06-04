@@ -7,6 +7,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
+import shap
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
 
 def evaluate_model_bias(df: pd.DataFrame,
                         target_col: str,
@@ -99,10 +103,25 @@ def evaluate_model_bias(df: pd.DataFrame,
                     'recall': cls_metrics['recall'],
                     'support': cls_metrics['support']
                 })
+
+    # ---- SHAP Explanation ----
+    feature_names = preprocessor.get_feature_names_out()
+    X_train_df = pd.DataFrame(X_train, columns=feature_names)
+    X_test_df = pd.DataFrame(X_test, columns=feature_names)
+    explainer = shap.Explainer(model, X_train_df)
+    shap_values = explainer(X_test_df.iloc[:1])
+
+    plt.figure()
+    shap.plots.waterfall(shap_values[0], show=False)
+    buf = BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight")
+    plt.close()
+    shap_html = f"<img src='data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}'>"
     
     return {
         'overall': overall,
         'group_report': rows,
-        'class_names': class_names.tolist()
+        'class_names': class_names.tolist(),
+        'shap_html': shap_html
     }
 
