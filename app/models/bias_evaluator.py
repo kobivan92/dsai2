@@ -8,16 +8,9 @@ from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 import shap
-<<<<<<< HEAD
-import json
-import base64
-from io import BytesIO
-import matplotlib.pyplot as plt
-=======
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
->>>>>>> fc15eae7bd54ddc976dff47533f77cc4fb631a15
 
 def evaluate_model_bias(df: pd.DataFrame,
                         target_col: str,
@@ -187,11 +180,6 @@ def evaluate_model_bias(df: pd.DataFrame,
         'overall': overall,
         'group_report': rows,
         'class_names': class_names.tolist(),
-<<<<<<< HEAD
-        'shap_plots': shap_plots,
-        'waterfall_plots': waterfall_plots
-=======
         'shap_html': shap_html
->>>>>>> fc15eae7bd54ddc976dff47533f77cc4fb631a15
     }
 
