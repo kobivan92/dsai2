@@ -17,7 +17,7 @@ def get_llm_recommendations(columns_description, df):
             {"role": "user", "content": f"""The dataset has these columns (with context):
 {columns_description}
 
-Please identify which of these columns should be used in code to estimate bias (i.e., protected attributes, demographic groupings, or contextual factors relevant for fairness analysis).  
+Please identify which of these columns should be used in code to estimate bias (i.e., protected attributes like gender and race or contextual factors relevant for fairness analysis).  
 Respond with only the column names, separated by commas."""}
         ],
         "stream": False,

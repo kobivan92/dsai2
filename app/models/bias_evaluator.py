@@ -7,6 +7,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
+import shap
+import json
+import base64
+from io import BytesIO
+import matplotlib.pyplot as plt
 
 def evaluate_model_bias(df: pd.DataFrame,
                         target_col: str,
@@ -71,6 +76,8 @@ def evaluate_model_bias(df: pd.DataFrame,
     # Overall report
     overall_dict = classification_report(y_test, y_pred, target_names=class_names, output_dict=True)
     overall = {}
+    
+    # Process each class in the order they appear in class_names
     for cls in class_names:
         if cls in overall_dict:
             overall[cls] = {
@@ -100,9 +107,67 @@ def evaluate_model_bias(df: pd.DataFrame,
                     'support': cls_metrics['support']
                 })
     
+    # Calculate SHAP values
+    explainer = shap.LinearExplainer(model, X_train)
+    shap_values = explainer.shap_values(X_test)
+    
+    # Create SHAP summary plot for each class
+    shap_plots = {}
+    waterfall_plots = {}
+    
+    for i, cls in enumerate(class_names):
+        # Summary plot
+        plt.figure(figsize=(10, 6))
+        shap.summary_plot(
+            shap_values[i] if isinstance(shap_values, list) else shap_values,
+            X_test,
+            feature_names=features,
+            show=False,
+            plot_size=(10, 6)
+        )
+        plt.title(f'SHAP Summary Plot for {cls}')
+        plt.tight_layout()
+        
+        # Save summary plot to base64 string
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight')
+        buffer.seek(0)
+        image_png = buffer.getvalue()
+        buffer.close()
+        plt.close()
+        
+        shap_plots[cls] = base64.b64encode(image_png).decode('utf-8')
+        
+        # Waterfall plot for the most representative sample of each class
+        plt.figure(figsize=(12, 8))
+        # Find the sample with the highest probability for this class
+        class_probs = model.predict_proba(X_test)[:, i]
+        sample_idx = np.argmax(class_probs)
+        
+        # Create waterfall plot
+        shap.waterfall_plot(
+            explainer.expected_value[i] if isinstance(explainer.expected_value, list) else explainer.expected_value,
+            shap_values[i][sample_idx] if isinstance(shap_values, list) else shap_values[sample_idx],
+            X_test[sample_idx]
+        )
+        plt.title(f'SHAP Waterfall Plot for {cls} (Most Representative Sample)')
+        plt.tight_layout()
+        
+        # Save waterfall plot to base64 string
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight')
+        buffer.seek(0)
+        image_png = buffer.getvalue()
+        buffer.close()
+        plt.close()
+        
+        waterfall_plots[cls] = base64.b64encode(image_png).decode('utf-8')
+    
     return {
         'overall': overall,
         'group_report': rows,
-        'class_names': class_names.tolist()
+        'class_names': class_names.tolist(),
+        'shap_plots': shap_plots,
+        'waterfall_plots': waterfall_plots
     }
 

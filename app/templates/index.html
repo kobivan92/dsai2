@@ -125,15 +125,17 @@ function displayResults(results) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${Object.entries(result.overall)
-                        .map(([cls, metrics]) => `
+                    ${result.class_names.map(cls => {
+                        const metrics = result.overall[cls];
+                        return `
                             <tr>
                                 <td>${cls}</td>
                                 <td>${metrics.precision.toFixed(3)}</td>
                                 <td>${metrics.recall.toFixed(3)}</td>
                                 <td>${metrics['f1-score'].toFixed(3)}</td>
                             </tr>
-                        `).join('')}
+                        `;
+                    }).join('')}
                 </tbody>
             </table>
         `;
@@ -166,8 +168,34 @@ function displayResults(results) {
             </table>
         `;
         
+        // SHAP plots
+        const shapDiv = document.createElement('div');
+        shapDiv.innerHTML = `
+            <h3>${attr} - Feature Importance Analysis</h3>
+            ${result.class_names.map(cls => `
+                <div class="mb-5">
+                    <h4>${cls}</h4>
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <h5>Summary Plot</h5>
+                            <img src="data:image/png;base64,${result.shap_plots[cls]}" 
+                                 class="img-fluid" 
+                                 alt="SHAP Summary Plot for ${cls}">
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <h5>Waterfall Plot (Most Representative Sample)</h5>
+                            <img src="data:image/png;base64,${result.waterfall_plots[cls]}" 
+                                 class="img-fluid" 
+                                 alt="SHAP Waterfall Plot for ${cls}">
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+        
         attrDiv.appendChild(overallDiv);
         attrDiv.appendChild(groupDiv);
+        attrDiv.appendChild(shapDiv);
         resultsContent.appendChild(attrDiv);
     }
     
