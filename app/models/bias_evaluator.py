@@ -8,10 +8,16 @@ from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 import shap
+<<<<<<< HEAD
 import json
 import base64
 from io import BytesIO
 import matplotlib.pyplot as plt
+=======
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
+>>>>>>> fc15eae7bd54ddc976dff47533f77cc4fb631a15
 
 def evaluate_model_bias(df: pd.DataFrame,
                         target_col: str,
@@ -106,6 +112,20 @@ def evaluate_model_bias(df: pd.DataFrame,
                     'recall': cls_metrics['recall'],
                     'support': cls_metrics['support']
                 })
+
+    # ---- SHAP Explanation ----
+    feature_names = preprocessor.get_feature_names_out()
+    X_train_df = pd.DataFrame(X_train, columns=feature_names)
+    X_test_df = pd.DataFrame(X_test, columns=feature_names)
+    explainer = shap.Explainer(model, X_train_df)
+    shap_values = explainer(X_test_df.iloc[:1])
+
+    plt.figure()
+    shap.plots.waterfall(shap_values[0], show=False)
+    buf = BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight")
+    plt.close()
+    shap_html = f"<img src='data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}'>"
     
     # Calculate SHAP values
     explainer = shap.LinearExplainer(model, X_train)
@@ -167,7 +187,11 @@ def evaluate_model_bias(df: pd.DataFrame,
         'overall': overall,
         'group_report': rows,
         'class_names': class_names.tolist(),
+<<<<<<< HEAD
         'shap_plots': shap_plots,
         'waterfall_plots': waterfall_plots
+=======
+        'shap_html': shap_html
+>>>>>>> fc15eae7bd54ddc976dff47533f77cc4fb631a15
     }
 
