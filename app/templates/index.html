@@ -195,6 +195,16 @@ function displayResults(result) {
         // Overall metrics (precision and recall only)
         const overallSection = document.createElement('div');
         overallSection.className = 'mb-4';
+        
+        // Convert overall metrics to array of rows
+        const overallRows = Object.entries(data.overall)
+            .filter(([key]) => !['accuracy', 'macro avg', 'weighted avg'].includes(key))
+            .map(([cls, metrics]) => ({
+                class: cls,
+                precision: metrics.precision,
+                recall: metrics.recall
+            }));
+
         overallSection.innerHTML = `
             <h4 class="mb-3">Overall Metrics</h4>
             <div class="table-responsive">
@@ -207,15 +217,13 @@ function displayResults(result) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${Object.entries(data.overall)
-                            .filter(([key]) => !['f1-score', 'precision', 'recall'].includes(key))
-                            .map(([cls, metrics]) => `
-                                <tr>
-                                    <td>${cls}</td>
-                                    <td>${Number(metrics.precision).toFixed(3)}</td>
-                                    <td>${Number(metrics.recall).toFixed(3)}</td>
-                                </tr>
-                            `).join('')}
+                        ${overallRows.map(row => `
+                            <tr>
+                                <td>${row.class}</td>
+                                <td>${Number(row.precision).toFixed(3)}</td>
+                                <td>${Number(row.recall).toFixed(3)}</td>
+                            </tr>
+                        `).join('')}
                     </tbody>
                 </table>
             </div>

@@ -150,7 +150,13 @@ def evaluate_model_bias(
 
     # Fit/transform X
     X = preprocessor.fit_transform(X_trimmed)
-    feature_names = preprocessor.get_feature_names_out()
+    
+    # Get feature names properly
+    feature_names = []
+    # Add numeric feature names
+    feature_names.extend([f"num__{name}" for name in num_feats])
+    # Add categorical feature names
+    feature_names.extend([f"cat__{name}" for name in cat_feats])
 
     # --- 5) Train/test split (stratified by y)
     X_train, X_test, y_train, y_test, g_train, g_test = train_test_split(
