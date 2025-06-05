@@ -59,6 +59,7 @@ def analyze():
         
         # Process each protected attribute
         results = {}
+        aif_metrics_for_llm = None
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
@@ -72,6 +73,8 @@ def analyze():
                     privileged_list=privileged_list,
                     unprivileged_list=unprivileged_list
                 )
+                if attr == race_col and bias_metrics is not None:
+                    aif_metrics_for_llm = bias_metrics.to_dict('records')
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
@@ -79,6 +82,8 @@ def analyze():
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None
                 }
         
+        if aif_metrics_for_llm is not None:
+            llm_recommendations['aif_metrics'] = aif_metrics_for_llm
         return jsonify({
             'status': 'success',
             'results': results,

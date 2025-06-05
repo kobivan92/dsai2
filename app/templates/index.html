@@ -112,6 +112,40 @@ function displayRecommendations(recommendations) {
     if (recommendations.unprivileged_list && recommendations.unprivileged_list.length > 0) {
         extraInfo += `<div class="mb-3"><strong>Unprivileged Groups:</strong> <ul>${recommendations.unprivileged_list.map(g => `<li>${g}</li>`).join('')}</ul></div>`;
     }
+    // Add AIF metrics table if present
+    if (recommendations.aif_metrics && recommendations.aif_metrics.length > 0) {
+        let aifTable = `
+            <div class=\"mb-3\"><strong>AIF360 Bias Metrics:</strong>
+            <div class=\"table-responsive\">
+            <table class=\"table table-striped table-hover\">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Privileged Rate</th>
+                        <th>Unprivileged Rate</th>
+                        <th>Statistical Parity Difference</th>
+                        <th>Disparate Impact</th>
+                        <th>Mean Difference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${recommendations.aif_metrics.map(metric => `
+                        <tr>
+                            <td>${metric.Category}</td>
+                            <td>${Number(metric['Privileged Rate']).toFixed(3)}</td>
+                            <td>${Number(metric['Unprivileged Rate']).toFixed(3)}</td>
+                            <td>${Number(metric['Statistical Parity Difference']).toFixed(3)}</td>
+                            <td>${Number(metric['Disparate Impact']).toFixed(3)}</td>
+                            <td>${Number(metric['Mean Difference']).toFixed(3)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            </div>
+            </div>
+        `;
+        extraInfo += aifTable;
+    }
     document.getElementById('recommendations').insertAdjacentHTML('beforeend', extraInfo);
     document.getElementById('recommendations').style.display = 'block';
 }
