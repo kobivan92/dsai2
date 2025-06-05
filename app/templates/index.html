@@ -85,68 +85,89 @@ function updateFileInfo(message, isCached = false) {
 
 // Function to display LLM recommendations
 function displayRecommendations(recommendations) {
-    document.getElementById('targetColumn').textContent = recommendations.target_column;
+    // Clear previous content
+    document.getElementById('recommendations').innerHTML = '<h3>LLM Recommendations</h3>';
     
-    const protectedAttrsList = document.getElementById('protectedAttributes');
-    protectedAttrsList.innerHTML = recommendations.protected_columns
-        .split(',')
-        .map(attr => `<li>${attr.trim()}</li>`)
-        .join('');
+    // Basic recommendations
+    let content = `
+        <div class="mb-3">
+            <strong>Target Column:</strong>
+            <span id="targetColumn">${recommendations.target_column}</span>
+        </div>
+        <div class="mb-3">
+            <strong>Protected Attributes:</strong>
+            <ul id="protectedAttributes">
+                ${recommendations.protected_columns.split(',').map(attr => `<li>${attr.trim()}</li>`).join('')}
+            </ul>
+        </div>
+        <div class="mb-3">
+            <strong>Excluded Columns:</strong>
+            <ul id="excludedColumns">
+                ${recommendations.excluded_columns.split(',').map(col => `<li>${col.trim()}</li>`).join('')}
+            </ul>
+        </div>
+        <div class="mb-3">
+            <strong>Top Correlated Features:</strong>
+            <pre id="correlations" style="background-color: #f8f9fa; padding: 10px; border-radius: 4px;">${recommendations.correlations}</pre>
+        </div>
+    `;
     
-    const excludedColsList = document.getElementById('excludedColumns');
-    excludedColsList.innerHTML = recommendations.excluded_columns
-        .split(',')
-        .map(col => `<li>${col.trim()}</li>`)
-        .join('');
-    
-    document.getElementById('correlations').textContent = recommendations.correlations;
-    
-    // Add AIF metrics and privileged/unprivileged groups if available
-    let extraInfo = '';
+    // Add race column and groups if available
     if (recommendations.race_column) {
-        extraInfo += `<div class="mb-3"><strong>Race Column for AIF Metrics:</strong> ${recommendations.race_column}</div>`;
+        content += `<div class="mb-3"><strong>Race Column for AIF Metrics:</strong> ${recommendations.race_column}</div>`;
     }
     if (recommendations.privileged_list && recommendations.privileged_list.length > 0) {
-        extraInfo += `<div class="mb-3"><strong>Privileged Groups:</strong> <ul>${recommendations.privileged_list.map(g => `<li>${g}</li>`).join('')}</ul></div>`;
-    }
-    if (recommendations.unprivileged_list && recommendations.unprivileged_list.length > 0) {
-        extraInfo += `<div class="mb-3"><strong>Unprivileged Groups:</strong> <ul>${recommendations.unprivileged_list.map(g => `<li>${g}</li>`).join('')}</ul></div>`;
-    }
-    // Add AIF metrics table if present
-    if (recommendations.aif_metrics && recommendations.aif_metrics.length > 0) {
-        let aifTable = `
-            <div class=\"mb-3\"><strong>AIF360 Bias Metrics:</strong>
-            <div class=\"table-responsive\">
-            <table class=\"table table-striped table-hover\">
-                <thead>
-                    <tr>
-                        <th>Category</th>
-                        <th>Privileged Rate</th>
-                        <th>Unprivileged Rate</th>
-                        <th>Statistical Parity Difference</th>
-                        <th>Disparate Impact</th>
-                        <th>Mean Difference</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${recommendations.aif_metrics.map(metric => `
-                        <tr>
-                            <td>${metric.Category}</td>
-                            <td>${Number(metric['Privileged Rate']).toFixed(3)}</td>
-                            <td>${Number(metric['Unprivileged Rate']).toFixed(3)}</td>
-                            <td>${Number(metric['Statistical Parity Difference']).toFixed(3)}</td>
-                            <td>${Number(metric['Disparate Impact']).toFixed(3)}</td>
-                            <td>${Number(metric['Mean Difference']).toFixed(3)}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-            </div>
+        content += `
+            <div class="mb-3">
+                <strong>Privileged Groups:</strong>
+                <ul>${recommendations.privileged_list.map(g => `<li>${g}</li>`).join('')}</ul>
             </div>
         `;
-        extraInfo += aifTable;
     }
-    document.getElementById('recommendations').insertAdjacentHTML('beforeend', extraInfo);
+    if (recommendations.unprivileged_list && recommendations.unprivileged_list.length > 0) {
+        content += `
+            <div class="mb-3">
+                <strong>Unprivileged Groups:</strong>
+                <ul>${recommendations.unprivileged_list.map(g => `<li>${g}</li>`).join('')}</ul>
+            </div>
+        `;
+    }
+    
+    // Add AIF metrics table if present
+    if (recommendations.aif_metrics && recommendations.aif_metrics.length > 0) {
+        content += `
+            <div class="mb-3">
+                <strong>AIF360 Bias Metrics:</strong>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Privileged Rate</th>
+                                <th>Unprivileged Rate</th>
+                                <th>Statistical Parity Difference</th>
+                                <th>Disparate Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recommendations.aif_metrics.map(metric => `
+                                <tr>
+                                    <td>${metric.Category}</td>
+                                    <td>${Number(metric['Privileged Rate']).toFixed(3)}</td>
+                                    <td>${Number(metric['Unprivileged Rate']).toFixed(3)}</td>
+                                    <td>${Number(metric['Statistical Parity Difference']).toFixed(3)}</td>
+                                    <td>${Number(metric['Disparate Impact']).toFixed(3)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Update the recommendations section
+    document.getElementById('recommendations').insertAdjacentHTML('beforeend', content);
     document.getElementById('recommendations').style.display = 'block';
 }
 
