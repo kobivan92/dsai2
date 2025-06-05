@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from app.utils.llm_utils import get_llm_recommendations
 from app.models.bias_evaluator import evaluate_model_bias
+import logging
 
 bp = Blueprint('main', __name__)
 
@@ -10,6 +11,9 @@ bp = Blueprint('main', __name__)
 UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 @bp.route('/')
 def home():
@@ -23,7 +27,7 @@ def analyze():
         columns_description = request.form['columns_description']
         n_rows = int(request.form['n_rows'])
         test_size = float(request.form['test_size'])
-        max_iter = int(request.form['max_iter'])
+        max_categories = int(request.form['max_categories'])
         
         # Check if file exists in uploads directory
         filename = file.filename
@@ -46,6 +50,9 @@ def analyze():
         target_column = llm_recommendations['target_column']
         protected_attributes = llm_recommendations['protected_columns'].split(',')
         excluded_columns = llm_recommendations['excluded_columns'].split(',')
+        race_col = llm_recommendations.get('race_column')
+        privileged_list = llm_recommendations.get('privileged_list')
+        unprivileged_list = llm_recommendations.get('unprivileged_list')
         
         # Remove excluded columns from the dataset
         df = df.drop(columns=[col.strip() for col in excluded_columns if col.strip() in df.columns])
@@ -55,14 +62,22 @@ def analyze():
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
-                result = evaluate_model_bias(
+                model, preprocessor, overall, group_report, shap_tables, bias_metrics = evaluate_model_bias(
                     df,
                     target_col=target_column,
                     protected_attr=attr,
                     test_size=test_size,
-                    max_iter=max_iter
+                    max_categories=max_categories,
+                    race_col=race_col,
+                    privileged_list=privileged_list,
+                    unprivileged_list=unprivileged_list
                 )
-                results[attr] = result
+                results[attr] = {
+                    'overall': overall.to_dict(),
+                    'group_report': group_report.to_dict('records'),
+                    'shap_tables': {k: v.to_dict('records') for k, v in shap_tables.items()},
+                    'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None
+                }
         
         return jsonify({
             'status': 'success',
