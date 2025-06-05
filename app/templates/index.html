@@ -207,13 +207,15 @@ function displayResults(result) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${Object.entries(data.overall).map(([cls, metrics]) => `
-                            <tr>
-                                <td>${cls}</td>
-                                <td>${Number(metrics.precision).toFixed(3)}</td>
-                                <td>${Number(metrics.recall).toFixed(3)}</td>
-                            </tr>
-                        `).join('')}
+                        ${Object.entries(data.overall)
+                            .filter(([key]) => !['f1-score', 'precision', 'recall'].includes(key))
+                            .map(([cls, metrics]) => `
+                                <tr>
+                                    <td>${cls}</td>
+                                    <td>${Number(metrics.precision).toFixed(3)}</td>
+                                    <td>${Number(metrics.recall).toFixed(3)}</td>
+                                </tr>
+                            `).join('')}
                     </tbody>
                 </table>
             </div>
