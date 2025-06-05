@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -140,7 +140,7 @@ def evaluate_model_bias(
     ])
     categorical_pipeline = Pipeline([
         ('impute', SimpleImputer(strategy='most_frequent')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
+        ('ordinal', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1))
     ])
 
     preprocessor = ColumnTransformer([
