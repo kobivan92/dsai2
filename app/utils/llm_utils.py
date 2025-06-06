@@ -170,9 +170,11 @@ Return a JSON object with keys "privileged_list" and "unprivileged_list", where 
 def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None):
     """Send the analysis summary and SHAP table for a protected attribute to the LLM and get a bias detection response."""
     url = "https://xoxof3kdzvlwkyk5hfaajacb.agents.do-ai.run/api/v1/chat/completions"
+    
     headers = {
         "Content-Type": "application/json",
         "Authorization": "Bearer _V__VxUKW6o9wnCPGh8YYgof_Rknl-XQ"
+    
     }
     prompt = f"""
 You are a fairness and bias analysis expert. Here is the bias and classification analysis for the protected attribute '{protected_attr}':
