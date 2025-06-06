@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify
 import pandas as pd
 import os
-from app.utils.llm_utils import get_llm_recommendations
+from app.utils.llm_utils import get_llm_recommendations, get_llm_bias_check
 from app.models.bias_evaluator import evaluate_model_bias
 import logging
 
@@ -57,13 +57,22 @@ def analyze():
         # Remove excluded columns from the dataset
         df = df.drop(columns=[col.strip() for col in excluded_columns if col.strip() in df.columns])
         
+        # Calculate SHAP tables once for all features and samples 0-10
+        model, preprocessor, overall, group_report, shap_tables, _ = evaluate_model_bias(
+            df,
+            target_col=target_column,
+            protected_attr=protected_attributes[0].strip(),
+            test_size=test_size,
+            max_categories=max_categories
+        )
+        global_shap = {'shap_tables': shap_tables}
         # Process each protected attribute
         results = {}
         aif_metrics_for_llm = None
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
-                model, preprocessor, overall, group_report, shap_tables, bias_metrics = evaluate_model_bias(
+                model, preprocessor, overall, group_report, _, bias_metrics = evaluate_model_bias(
                     df,
                     target_col=target_column,
                     protected_attr=attr,
@@ -71,19 +80,30 @@ def analyze():
                     max_categories=max_categories,
                     race_col=race_col,
                     privileged_list=privileged_list,
-                    unprivileged_list=unprivileged_list
+                    unprivileged_list=unprivileged_list,
+                    global_shap=None
                 )
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
+                summary = f"Overall:\n{overall.to_string()}\n\nGroup-wise:\n{group_report.to_string()}"
+                if bias_metrics is not None:
+                    summary += f"\n\nBias Metrics:\n{bias_metrics.to_string()}"
+                shap_table_str = ""
+                if shap_tables:
+                    for cls, shap_df in shap_tables.items():
+                        shap_table_str += f"Class: {cls}\n{pd.DataFrame(shap_df).to_string(index=False)}\n\n"
+                llm_bias_check = get_llm_bias_check(attr, summary, shap_table=shap_table_str if shap_table_str else None)
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
                     'shap_tables': {k: v.to_dict('records') for k, v in shap_tables.items()},
-                    'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None
+                    'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
+                    'llm_bias_check': llm_bias_check
                 }
         
         if aif_metrics_for_llm is not None:
             llm_recommendations['aif_metrics'] = aif_metrics_for_llm
+            
         return jsonify({
             'status': 'success',
             'results': results,

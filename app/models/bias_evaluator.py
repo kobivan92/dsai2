@@ -85,7 +85,8 @@ def evaluate_model_bias(
     random_state: int = 42,
     race_col: str = None,
     privileged_list: list = None,
-    unprivileged_list: list = None
+    unprivileged_list: list = None,
+    global_shap: dict = None
 ):
     """
     1) Trains a RandomForestClassifier (3‐class) on df[features] → df[target_col].
@@ -93,24 +94,16 @@ def evaluate_model_bias(
     3) Builds a SHAP "long" table via nested Python loops to ensure lengths match, and
        prints a waterfall plot for sample 0 of each class.
     4) Optionally collapses rare categories so OneHotEncoder doesn't explode into too many columns.
-
-    Returns:
-      - model
-      - fitted ColumnTransformer
-      - overall classification_report (DataFrame)
-      - per‐group report (DataFrame)
-      - a dict of SHAP‐tables: { class_name → DataFrame(row_id, feature, feature_value, base_value, shap_value) }
     """
 
     # --- 0) Drop rows missing target or protected_attr
     data = df.dropna(subset=[target_col, protected_attr]).copy()
 
     # --- 1) Auto‐select features (everything except target + protected_attr + known ID columns)
-    exclude = {
-        target_col, protected_attr,
-        
-    }
-    features = [c for c in data.columns if c not in exclude]
+    # Only use SUSP_RACE, SUSP_SEX, VIC_RACE as features
+    selected_cat_features = ['SUSP_RACE', 'SUSP_SEX', 'VIC_RACE']
+    features = [c for c in selected_cat_features if c in data.columns]
+    print("Selected categorical features for SHAP/model:", features)
 
     X_df     = data[features].copy()
     y_series = data[target_col].astype(str).copy()
@@ -129,34 +122,28 @@ def evaluate_model_bias(
             X_trimmed[col].isin(topk),
             other="<OTHER>"
         )
+    print("X_trimmed columns:", X_trimmed.columns.tolist())
 
-    # --- 4) Build numeric + categorical pipelines
-    num_feats = X_trimmed.select_dtypes(include=['int64','float64']).columns.tolist()
+    # --- 4) Build categorical pipeline ONLY
     cat_feats = X_trimmed.select_dtypes(include=['object','category']).columns.tolist()
+    print("Categorical features:", cat_feats)
 
-    numeric_pipeline = Pipeline([
-        ('impute', SimpleImputer(strategy='mean')),
-        ('scale',   StandardScaler())
-    ])
     categorical_pipeline = Pipeline([
         ('impute', SimpleImputer(strategy='most_frequent')),
         ('ordinal', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1))
     ])
 
     preprocessor = ColumnTransformer([
-        ('num', numeric_pipeline, num_feats),
         ('cat', categorical_pipeline, cat_feats)
     ])
 
     # Fit/transform X
     X = preprocessor.fit_transform(X_trimmed)
+    print("X shape:", X.shape)
     
     # Get feature names properly
-    feature_names = []
-    # Add numeric feature names
-    feature_names.extend([f"num__{name}" for name in num_feats])
-    # Add categorical feature names
-    feature_names.extend([f"cat__{name}" for name in cat_feats])
+    feature_names = [f"cat__{name}" for name in cat_feats]
+    print("Feature names for model and SHAP:", feature_names)
 
     # --- 5) Train/test split (stratified by y)
     X_train, X_test, y_train, y_test, g_train, g_test = train_test_split(
@@ -176,14 +163,16 @@ def evaluate_model_bias(
     y_pred = model.predict(X_test)
 
     # --- 7) Overall classification_report
-    overall = pd.DataFrame(
-        classification_report(
-            y_test,
-            y_pred,
-            target_names=class_names,
-            output_dict=True
-        )
-    ).transpose()[['precision','recall','f1-score']]
+    report = classification_report(
+        y_test,
+        y_pred,
+        target_names=class_names,
+        output_dict=True
+    )
+    
+    # Convert report to DataFrame and select only class rows
+    overall = pd.DataFrame(report).transpose()
+    overall = overall[overall.index.isin(class_names)][['precision', 'recall']]
 
     print(f"\n=== Overall Classification Report (protected_attr = {protected_attr}) ===")
     print(overall)
@@ -215,44 +204,63 @@ def evaluate_model_bias(
     print(f"\n=== Metrics by {protected_attr} and Class ===")
     print(group_report)
 
-    # --- 9) Build a SHAP TreeExplainer on the RF, using an Independent masker on X_train
-    masker = shap.maskers.Independent(X_train, max_samples=100)
-    explainer = shap.TreeExplainer(model, data=masker)
-    sv = explainer(X_test, check_additivity=False)
-    shap_tables = {}
-    for class_idx in range(len(class_names)):
-        cls_name = class_names[class_idx]
-        exp_cls = shap.Explanation(
-            sv.values[:, class_idx, :],
-            sv.base_values[:, class_idx],
-            data=X_test,
-            feature_names=feature_names
-        )
-        n_test, n_feats = exp_cls.values.shape
-        row_ids = []
-        features_list = []
-        feat_values = []
-        base_values = []
-        shap_values = []
-        for i in range(n_test):
-            base_i = exp_cls.base_values[i]
-            for j in range(n_feats):
-                row_ids.append(i)
-                features_list.append(feature_names[j])
-                feat_values.append(exp_cls.data[i, j])
-                base_values.append(base_i)
-                shap_values.append(exp_cls.values[i, j])
-        df_shap = pd.DataFrame({
-            'row_id': row_ids,
-            'feature': features_list,
-            'feature_value': feat_values,
-            'base_value': base_values,
-            'shap_value': shap_values
-        })
-        shap_tables[cls_name] = df_shap
+    # Only calculate SHAP if not provided
+    if global_shap is not None:
+        shap_tables = global_shap['shap_tables']
+    else:
+        # --- 9) Build a SHAP TreeExplainer on the RF, using an Independent masker on X_train
+        masker = shap.maskers.Independent(X_train, max_samples=100)
+        explainer = shap.TreeExplainer(model, data=masker)
+        # Use a random sample of 10 rows from X_test for SHAP
+        n_samples = min(10, X_test.shape[0])
+        rng = np.random.default_rng(42)
+        sample_indices = rng.choice(X_test.shape[0], size=n_samples, replace=False)
+        X_shap = X_test[sample_indices]
+        sv = explainer(X_shap, check_additivity=False)
+        shap_tables = {}
+        for class_idx in range(len(class_names)):
+            cls_name = class_names[class_idx]
+            exp_cls = shap.Explanation(
+                sv.values[:, class_idx, :],
+                sv.base_values[:, class_idx],
+                data=X_shap,
+                feature_names=feature_names
+            )
+            n_test, n_feats = exp_cls.values.shape
+            row_ids = []
+            features_list = []
+            feat_values = []
+            base_values = []
+            shap_values = []
+            for i in range(n_test):
+                base_i = exp_cls.base_values[i]
+                for j in range(n_feats):
+                    row_ids.append(i)
+                    features_list.append(feature_names[j])
+                    feat_values.append(exp_cls.data[i, j])
+                    base_values.append(base_i)
+                    shap_values.append(exp_cls.values[i, j])
+            df_shap = pd.DataFrame({
+                'row_id': row_ids,
+                'feature': features_list,
+                'feature_value': feat_values,
+                'base_value': base_values,
+                'shap_value': shap_values
+            })
+            print(f"SHAP table sample for class {cls_name}:")
+            print(df_shap.head())
+
+            shap_tables[cls_name] = df_shap
+            # One way: show the unique feature names in df_shap
+            print(sorted(df_shap['feature'].unique()))
+
+# Or, directly filter for rows where feature starts with 'cat__'
+            print(df_shap[df_shap['feature'].str.startswith('cat__')].head())
+
     # Compute bias_metrics only for race column
     bias_metrics = None
     if race_col is not None and privileged_list is not None and unprivileged_list is not None:
         if protected_attr == race_col:
             bias_metrics = compute_bias_metrics(df, target_col, race_col, privileged_list, unprivileged_list)
+    
     return model, preprocessor, overall, group_report, shap_tables, bias_metrics

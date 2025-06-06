@@ -166,3 +166,28 @@ Return a JSON object with keys "privileged_list" and "unprivileged_list", where 
         'privileged_list': privileged_list,
         'unprivileged_list': unprivileged_list
     }
+
+def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None):
+    """Send the analysis summary and SHAP table for a protected attribute to the LLM and get a bias detection response."""
+    url = "https://xoxof3kdzvlwkyk5hfaajacb.agents.do-ai.run/api/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer _V__VxUKW6o9wnCPGh8YYgof_Rknl-XQ"
+    }
+    prompt = f"""
+You are a fairness and bias analysis expert. Here is the bias and classification analysis for the protected attribute '{protected_attr}':
+
+{analysis_summary}
+"""
+    if shap_table is not None:
+        prompt += f"\nSHAP Feature Importance Table:\n{shap_table}\n"
+        prompt += "\nPlease analyze also the SHAP table for evidence of bias."
+    prompt += "\nPlease only detect and describe any potential biases or fairness issues. Do not provide recommendations or mitigation steps."
+    payload = {
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "stream": False
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json()['choices'][0]['message']['content'].strip()
