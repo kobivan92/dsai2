@@ -4,6 +4,7 @@ import os
 from app.utils.llm_utils import get_llm_recommendations, get_llm_bias_check
 from app.models.bias_evaluator import evaluate_model_bias
 import logging
+from app.config import LLM_ENDPOINTS
 
 bp = Blueprint('main', __name__)
 
@@ -17,7 +18,7 @@ log.setLevel(logging.ERROR)
 
 @bp.route('/')
 def home():
-    return render_template('index.html')
+    return render_template('index.html', llm_models=list(LLM_ENDPOINTS.keys()))
 
 @bp.route('/analyze', methods=['POST'])
 def analyze():
@@ -28,6 +29,14 @@ def analyze():
         n_rows = int(request.form['n_rows'])
         test_size = float(request.form['test_size'])
         max_categories = int(request.form['max_categories'])
+        llm_model = request.form.get('llm_model', 'llama_3_3')  # Get selected LLM model
+        
+        # Validate LLM model selection
+        if llm_model not in LLM_ENDPOINTS:
+            return jsonify({
+                'status': 'error',
+                'message': f'Invalid LLM model selected. Available models: {", ".join(LLM_ENDPOINTS.keys())}'
+            })
         
         # Check if file exists in uploads directory
         filename = file.filename
@@ -46,7 +55,7 @@ def analyze():
             df = df.head(n_rows)
         
         # Get LLM recommendations
-        llm_recommendations = get_llm_recommendations(columns_description, df)
+        llm_recommendations = get_llm_recommendations(columns_description, df, llm_model=llm_model)
         target_column = llm_recommendations['target_column']
         protected_attributes = llm_recommendations['protected_columns'].split(',')
         excluded_columns = llm_recommendations['excluded_columns'].split(',')
@@ -92,7 +101,7 @@ def analyze():
                 if shap_tables:
                     for cls, shap_df in shap_tables.items():
                         shap_table_str += f"Class: {cls}\n{pd.DataFrame(shap_df).to_string(index=False)}\n\n"
-                llm_bias_check = get_llm_bias_check(attr, summary, shap_table=shap_table_str if shap_table_str else None)
+                llm_bias_check = get_llm_bias_check(attr, summary, shap_table=shap_table_str if shap_table_str else None, llm_model=llm_model)
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),

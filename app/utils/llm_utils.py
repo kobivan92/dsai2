@@ -3,14 +3,13 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 import ast
 import json
+from app.config import LLM_ENDPOINTS
 
-def get_llm_recommendations(columns_description, df):
+def get_llm_recommendations(columns_description, df, llm_model='default'):
     """Get target variable, protected columns, excluded columns, plus race column and privileged/unprivileged lists from LLM."""
-    url = "https://xoxof3kdzvlwkyk5hfaajacb.agents.do-ai.run/api/v1/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer _V__VxUKW6o9wnCPGh8YYgof_Rknl-XQ"
-    }
+    endpoint = LLM_ENDPOINTS[llm_model]
+    url = endpoint['url']
+    headers = endpoint['headers']
     
     # 1. Identify protected/bias-related columns
     payload1 = {
@@ -167,15 +166,12 @@ Return a JSON object with keys "privileged_list" and "unprivileged_list", where 
         'unprivileged_list': unprivileged_list
     }
 
-def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None):
+def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None, llm_model='default'):
     """Send the analysis summary and SHAP table for a protected attribute to the LLM and get a bias detection response."""
-    url = "https://xoxof3kdzvlwkyk5hfaajacb.agents.do-ai.run/api/v1/chat/completions"
+    endpoint = LLM_ENDPOINTS[llm_model]
+    url = endpoint['url']
+    headers = endpoint['headers']
     
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer _V__VxUKW6o9wnCPGh8YYgof_Rknl-XQ"
-    
-    }
     prompt = f"""
 You are a fairness and bias analysis expert. Here is the bias and classification analysis for the protected attribute '{protected_attr}':
 

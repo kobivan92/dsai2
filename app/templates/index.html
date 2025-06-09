@@ -29,10 +29,18 @@
         </div>
         
         <div class="col-md-4 mb-3">
-            <label for="max_categories" class="form-label">Max Categories</label>
-            <input type="number" class="form-control" id="max_categories" name="max_categories" value="10" min="1">
-            <div class="form-text">Maximum categories per feature</div>
+            <label for="max_categories" class="form-label">Maximum Categories</label>
+            <input type="number" class="form-control" id="max_categories" name="max_categories" value="10" min="1" max="100">
         </div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="llm_model" class="form-label">LLM Model</label>
+        <select class="form-control" id="llm_model" name="llm_model">
+            {% for model in llm_models %}
+            <option value="{{ model }}">{{ model }}</option>
+            {% endfor %}
+        </select>
     </div>
     
     <button type="submit" class="btn btn-primary">Analyze</button>
