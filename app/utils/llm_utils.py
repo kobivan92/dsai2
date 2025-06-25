@@ -173,16 +173,57 @@ def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None, llm_mo
     headers = endpoint['headers']
     
     prompt = f"""
-You are a fairness and bias analysis expert. Here is the bias and classification analysis for the protected attribute '{protected_attr}':
+Here is the bias and classification analysis for the protected attribute '{protected_attr}':
 
 {analysis_summary}
 """
     if shap_table is not None:
         prompt += f"\nSHAP Feature Importance Table:\n{shap_table}\n"
-        prompt += "\nPlease analyze also the SHAP table for evidence of bias."
-    prompt += "\nPlease only detect and describe any potential biases or fairness issues. Do not provide recommendations or mitigation steps."
+    prompt += (
+        "\nInstructions:\n"
+        "- You must state clearly whether bias is present or absent.\n"
+        "- Your response must include a conclusive and detailed judgment, such as 'Bias is detected against group X and group Y, favoring group Z' or 'No bias detected.'\n"
+        "- Specify exactly which groups are affected and how, if bias is present.\n"
+        "- You must use explicit, unambiguous group names (e.g., 'Black', 'White', 'Hispanic', 'Male', 'Female', etc.) and avoid vague terms like 'certain groups' or 'some backgrounds'.\n"
+        "- Clearly explain the nature of the bias in plain language.\n"
+        "- Do not list, describe, or mention any metrics, numbers, or SHAP values. Do not include any numeric or statistical output.\n"
+        "- Do not hedge or speculate.\n"
+        "- Do not provide recommendations or mitigation steps.\n"
+        "- You must give a clear conclusion: either (1) bias is detected (specify how and for whom), or (2) no significant bias is detected. Only conclude bias if evidence is strong.\n"
+        "- Respond in a maximum of 3 sentences."
+    )
     payload = {
         "messages": [
+            {"role": "system", "content": "You are a concise and objective assistant. Respond in a maximum of 3 sentences. You must give a conclusive and detailed judgment about bias, specifying which groups are affected and how, using explicit group names, and do not hedge, speculate, or mention any metrics or numbers. Only conclude bias if evidence is strong."},
+            {"role": "user", "content": prompt}
+        ],
+        "stream": False
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json()['choices'][0]['message']['content'].strip()
+
+def get_llm_general_bias_conclusion(attribute_bias_checks: dict, llm_model='default'):
+    """Send all attribute-level LLM bias checks to the LLM and get a general dataset-level bias conclusion."""
+    endpoint = LLM_ENDPOINTS[llm_model]
+    url = endpoint['url']
+    headers = endpoint['headers']
+
+    # Concatenate all attribute-level bias checks
+    checks_str = "\n\n".join([f"{attr}: {text}" for attr, text in attribute_bias_checks.items()])
+    prompt = f"""
+Here are the bias analysis results for all protected attributes in the dataset:
+{checks_str}
+
+Instructions:
+- Evaluate the overall evidence of bias in the dataset.
+- You must give a clear conclusion: either (1) overall bias is detected (specify how and for whom), or (2) no significant overall bias is detected. Only conclude bias if evidence is strong.
+- Use explicit group names and plain language.
+- Do not provide recommendations or mitigation steps.
+- Respond in a maximum of 3 sentences.
+"""
+    payload = {
+        "messages": [
+            {"role": "system", "content": "You are a concise and objective assistant. Respond in a maximum of 3 sentences. You must give a conclusive and detailed judgment about overall bias in the dataset, specifying which groups are affected and how, using explicit group names. Do not hedge, speculate, or mention any metrics or numbers. Only conclude bias if evidence is strong."},
             {"role": "user", "content": prompt}
         ],
         "stream": False

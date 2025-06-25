@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify
 import pandas as pd
 import os
-from app.utils.llm_utils import get_llm_recommendations, get_llm_bias_check
+from app.utils.llm_utils import get_llm_recommendations, get_llm_bias_check, get_llm_general_bias_conclusion
 from app.models.bias_evaluator import evaluate_model_bias
 import logging
 from app.config import LLM_ENDPOINTS
@@ -78,6 +78,7 @@ def analyze():
         # Process each protected attribute
         results = {}
         aif_metrics_for_llm = None
+        attribute_bias_checks = {}
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
@@ -109,15 +110,20 @@ def analyze():
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
                     'llm_bias_check': llm_bias_check
                 }
+                attribute_bias_checks[attr] = llm_bias_check
         
         if aif_metrics_for_llm is not None:
             llm_recommendations['aif_metrics'] = aif_metrics_for_llm
-            
+        
+        # General bias conclusion
+        general_bias_conclusion = get_llm_general_bias_conclusion(attribute_bias_checks, llm_model=llm_model)
+        
         return jsonify({
             'status': 'success',
             'results': results,
             'llm_recommendations': llm_recommendations,
-            'is_cached': is_cached
+            'is_cached': is_cached,
+            'general_bias_conclusion': general_bias_conclusion
         })
     
     except Exception as e:

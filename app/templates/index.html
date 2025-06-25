@@ -189,6 +189,13 @@ function displayResults(result) {
         resultsDiv.innerHTML = '<div class="alert alert-warning">No analysis results to display.</div>';
         return;
     }
+    // Show general bias conclusion at the top
+    if (result.general_bias_conclusion) {
+        const generalDiv = document.createElement('div');
+        generalDiv.className = 'alert alert-primary mb-4';
+        generalDiv.innerHTML = `<h3 class='mb-2'>General Bias Conclusion</h3><div style='white-space: pre-line;'>${result.general_bias_conclusion}</div>`;
+        resultsDiv.appendChild(generalDiv);
+    }
     // Create container for each protected attribute
     for (const [attr, data] of Object.entries(result.results)) {
         const attrContainer = document.createElement('div');
@@ -211,6 +218,8 @@ function displayResults(result) {
             attrContainer.appendChild(llmSection);
         }
 
+        // The following sections are hidden/commented out:
+        /*
         // Group-wise metrics
         const groupSection = document.createElement('div');
         groupSection.className = 'mb-4';
@@ -307,6 +316,7 @@ function displayResults(result) {
                 }
             }
         }
+        */
         resultsDiv.appendChild(attrContainer);
     }
 }
