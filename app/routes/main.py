@@ -57,24 +57,33 @@ def analyze():
         # Get LLM recommendations
         llm_recommendations = get_llm_recommendations(columns_description, df, llm_model=llm_model)
         target_column = llm_recommendations['target_column']
-        protected_attributes = llm_recommendations['protected_columns'].split(',')
+        protected_attributes = [col.strip() for col in llm_recommendations['protected_columns'].split(',') if col.strip()]
         excluded_columns = llm_recommendations['excluded_columns'].split(',')
         race_col = llm_recommendations.get('race_column')
         privileged_list = llm_recommendations.get('privileged_list')
         unprivileged_list = llm_recommendations.get('unprivileged_list')
         
+        # Validate that we have protected attributes
+        if not protected_attributes:
+            return jsonify({
+                'status': 'error',
+                'message': 'No protected attributes found in LLM recommendations. Please check your data and try again.'
+            })
+        
         # Remove excluded columns from the dataset
         df = df.drop(columns=[col.strip() for col in excluded_columns if col.strip() in df.columns])
         
-        # Calculate SHAP tables once for all features and samples 0-10
-        model, preprocessor, overall, group_report, shap_tables, _ = evaluate_model_bias(
+        # Calculate Global Explanations once for all features
+        model, preprocessor, overall, group_report, global_explanations, _ = evaluate_model_bias(
             df,
             target_col=target_column,
             protected_attr=protected_attributes[0].strip(),
             test_size=test_size,
-            max_categories=max_categories
+            max_categories=max_categories,
+            protected_columns=llm_recommendations['protected_columns']
         )
-        global_shap = {'shap_tables': shap_tables}
+        global_explanations_data = {'global_explanations': global_explanations}
+        
         # Process each protected attribute
         results = {}
         aif_metrics_for_llm = None
@@ -90,22 +99,26 @@ def analyze():
                     race_col=race_col,
                     privileged_list=privileged_list,
                     unprivileged_list=unprivileged_list,
-                    global_shap=None
+                    global_shap=None,
+                    protected_columns=llm_recommendations['protected_columns']
                 )
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
                 summary = f"Overall:\n{overall.to_string()}\n\nGroup-wise:\n{group_report.to_string()}"
                 if bias_metrics is not None:
                     summary += f"\n\nBias Metrics:\n{bias_metrics.to_string()}"
-                shap_table_str = ""
-                if shap_tables:
-                    for cls, shap_df in shap_tables.items():
-                        shap_table_str += f"Class: {cls}\n{pd.DataFrame(shap_df).to_string(index=False)}\n\n"
-                llm_bias_check = get_llm_bias_check(attr, summary, shap_table=shap_table_str if shap_table_str else None, llm_model=llm_model)
+                
+                # Format global explanations for LLM
+                global_explanations_str = ""
+                if global_explanations:
+                    for cls, exp_df in global_explanations.items():
+                        global_explanations_str += f"\nClass: {cls}\n{exp_df.to_string(index=False)}\n"
+                
+                llm_bias_check = get_llm_bias_check(attr, summary, global_explanations=global_explanations_str if global_explanations_str else None, llm_model=llm_model)
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
-                    'shap_tables': {k: v.to_dict('records') for k, v in shap_tables.items()},
+                    'global_explanations': {k: v.to_dict('records') for k, v in global_explanations.items()},
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
                     'llm_bias_check': llm_bias_check
                 }
@@ -172,24 +185,32 @@ def analyze_multi():
             })
         
         target_column = successful_recommendations['target_column']
-        protected_attributes = successful_recommendations['protected_columns'].split(',')
+        protected_attributes = [col.strip() for col in successful_recommendations['protected_columns'].split(',') if col.strip()]
         excluded_columns = successful_recommendations['excluded_columns'].split(',')
         race_col = successful_recommendations.get('race_column')
         privileged_list = successful_recommendations.get('privileged_list')
         unprivileged_list = successful_recommendations.get('unprivileged_list')
         
+        # Validate that we have protected attributes
+        if not protected_attributes:
+            return jsonify({
+                'status': 'error',
+                'message': 'No protected attributes found in LLM recommendations. Please check your data and try again.'
+            })
+        
         # Remove excluded columns from the dataset
         df = df.drop(columns=[col.strip() for col in excluded_columns if col.strip() in df.columns])
         
-        # Calculate SHAP tables once for all features and samples 0-10
-        model, preprocessor, overall, group_report, shap_tables, _ = evaluate_model_bias(
+        # Calculate Global Explanations once for all features
+        model, preprocessor, overall, group_report, global_explanations, _ = evaluate_model_bias(
             df,
             target_col=target_column,
             protected_attr=protected_attributes[0].strip(),
             test_size=test_size,
-            max_categories=max_categories
+            max_categories=max_categories,
+            protected_columns=successful_recommendations['protected_columns']
         )
-        global_shap = {'shap_tables': shap_tables}
+        global_explanations_data = {'global_explanations': global_explanations}
         
         # Process each protected attribute
         results = {}
@@ -206,27 +227,30 @@ def analyze_multi():
                     race_col=race_col,
                     privileged_list=privileged_list,
                     unprivileged_list=unprivileged_list,
-                    global_shap=None
+                    global_shap=None,
+                    protected_columns=successful_recommendations['protected_columns']
                 )
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
                 summary = f"Overall:\n{overall.to_string()}\n\nGroup-wise:\n{group_report.to_string()}"
                 if bias_metrics is not None:
                     summary += f"\n\nBias Metrics:\n{bias_metrics.to_string()}"
-                shap_table_str = ""
-                if shap_tables:
-                    for cls, shap_df in shap_tables.items():
-                        shap_table_str += f"Class: {cls}\n{pd.DataFrame(shap_df).to_string(index=False)}\n\n"
+                
+                # Format global explanations for LLM
+                global_explanations_str = ""
+                if global_explanations:
+                    for cls, exp_df in global_explanations.items():
+                        global_explanations_str += f"\nClass: {cls}\n{exp_df.to_string(index=False)}\n"
                 
                 # Get bias analysis from all LLMs
                 print(f"Getting multi-LLM bias analysis for {attr}...")
-                llm_bias_check_multi = get_llm_bias_check_multi(attr, summary, shap_table=shap_table_str if shap_table_str else None)
+                llm_bias_check_multi = get_llm_bias_check_multi(attr, summary, global_explanations=global_explanations_str if global_explanations_str else None)
                 llm_bias_check = llm_bias_check_multi
                 
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
-                    'shap_tables': {k: v.to_dict('records') for k, v in shap_tables.items()},
+                    'global_explanations': {k: v.to_dict('records') for k, v in global_explanations.items()},
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
                     'llm_bias_check': llm_bias_check
                 }

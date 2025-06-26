@@ -105,7 +105,7 @@
         
         <div id="results" class="results">
             <h2>Analysis Results</h2>
-            <div id="resultsContent"></div>
+            <div id="results-content"></div>
         </div>
     </div>
 
@@ -172,9 +172,48 @@
                 document.getElementById('recommendations').style.display = 'block';
                 
                 // Display results
-                const resultsContent = document.getElementById('resultsContent');
+                const resultsContent = document.getElementById('results-content');
                 resultsContent.innerHTML = '';
                 
+                // Add summary bias level
+                if (data.results && Object.keys(data.results).length > 0) {
+                    const summaryDiv = document.createElement('div');
+                    summaryDiv.className = 'alert alert-info mb-4';
+                    
+                    // Calculate overall bias level
+                    let maxBiasLevel = 'LOW';
+                    let biasCounts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
+                    
+                    for (const [attr, result] of Object.entries(data.results)) {
+                        if (result.bias_metrics) {
+                            for (const metric of result.bias_metrics) {
+                                const level = metric.Bias_Level || 'LOW';
+                                biasCounts[level]++;
+                            }
+                        }
+                    }
+                    
+                    // Determine overall level
+                    if (biasCounts.CRITICAL > 0) maxBiasLevel = 'CRITICAL';
+                    else if (biasCounts.HIGH > 0) maxBiasLevel = 'HIGH';
+                    else if (biasCounts.MEDIUM > 0) maxBiasLevel = 'MEDIUM';
+                    
+                    let summaryClass = 'alert-info';
+                    if (maxBiasLevel === 'HIGH') summaryClass = 'alert-warning';
+                    else if (maxBiasLevel === 'CRITICAL') summaryClass = 'alert-danger';
+                    else if (maxBiasLevel === 'LOW') summaryClass = 'alert-success';
+                    
+                    summaryDiv.className = `alert ${summaryClass} mb-4`;
+                    summaryDiv.innerHTML = `
+                        <h4><i class="fas fa-chart-line"></i> Overall Bias Assessment</h4>
+                        <p><strong>Overall Bias Level:</strong> <span class="badge bg-${maxBiasLevel === 'LOW' ? 'success' : maxBiasLevel === 'MEDIUM' ? 'warning' : 'danger'}">${maxBiasLevel}</span></p>
+                        <p><strong>Bias Distribution:</strong> 
+                            ${biasCounts.LOW} LOW, ${biasCounts.MEDIUM} MEDIUM, ${biasCounts.HIGH} HIGH, ${biasCounts.CRITICAL} CRITICAL
+                        </p>
+                    `;
+                    resultsContent.appendChild(summaryDiv);
+                }
+
                 for (const [attr, result] of Object.entries(data.results)) {
                     const attrDiv = document.createElement('div');
                     attrDiv.className = 'mb-4';
@@ -234,16 +273,109 @@
                         </table>
                     `;
 
-                    // SHAP waterfall plot
-                    const shapDiv = document.createElement('div');
-                    shapDiv.innerHTML = `
-                        <h3>${attr} - SHAP Waterfall</h3>
-                        ${result.shap_html}
-                    `;
+                    // Global Explanations
+                    const globalExplanationsDiv = document.createElement('div');
+                    if (result.global_explanations) {
+                        let globalExplanationsHTML = `<h3>${attr} - Global Feature Importance</h3>`;
+                        
+                        for (const [className, explanations] of Object.entries(result.global_explanations)) {
+                            globalExplanationsHTML += `
+                                <h4>Class: ${className}</h4>
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Feature</th>
+                                            <th>Importance</th>
+                                            <th>Rank</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${explanations.map(exp => `
+                                            <tr>
+                                                <td>${exp.feature}</td>
+                                                <td>${exp.importance.toFixed(4)}</td>
+                                                <td>${exp.rank}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                        }
+                        globalExplanationsDiv.innerHTML = globalExplanationsHTML;
+                    } else {
+                        globalExplanationsDiv.innerHTML = `<h3>${attr} - Global Feature Importance</h3><p>No global explanations available.</p>`;
+                    }
+
+                    // LLM Bias Analysis
+                    const llmDiv = document.createElement('div');
+                    if (result.llm_bias_check) {
+                        if (typeof result.llm_bias_check === 'object') {
+                            // Multi-LLM results
+                            let llmHTML = `<h3>${attr} - Multi-LLM Bias Analysis</h3>`;
+                            for (const [model, analysis] of Object.entries(result.llm_bias_check)) {
+                                if (analysis.error) {
+                                    llmHTML += `<h4>${model}</h4><p class="text-danger">Error: ${analysis.error}</p>`;
+                                } else {
+                                    llmHTML += `<h4>${model}</h4><p>${analysis}</p>`;
+                                }
+                            }
+                            llmDiv.innerHTML = llmHTML;
+                        } else {
+                            // Single LLM result
+                            llmDiv.innerHTML = `
+                                <h3>${attr} - LLM Bias Analysis</h3>
+                                <p>${result.llm_bias_check}</p>
+                            `;
+                        }
+                    } else {
+                        llmDiv.innerHTML = `<h3>${attr} - LLM Bias Analysis</h3><p>No LLM analysis available.</p>`;
+                    }
+
+                    // Bias Metrics
+                    const biasMetricsDiv = document.createElement('div');
+                    if (result.bias_metrics && result.bias_metrics.length > 0) {
+                        let biasMetricsHTML = `<h3>${attr} - Bias Metrics</h3>`;
+                        
+                        for (const metric of result.bias_metrics) {
+                            const biasLevel = metric.Bias_Level || 'UNKNOWN';
+                            let biasClass = 'text-secondary';
+                            if (biasLevel === 'LOW') biasClass = 'text-success';
+                            else if (biasLevel === 'MEDIUM') biasClass = 'text-warning';
+                            else if (biasLevel === 'HIGH') biasClass = 'text-danger';
+                            else if (biasLevel === 'CRITICAL') biasClass = 'text-danger fw-bold';
+                            
+                            biasMetricsHTML += `
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h5>Category: ${metric.Category}</h5>
+                                        <span class="badge ${biasClass}">Bias Level: ${biasLevel}</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Privileged Rate:</strong> ${(metric.Privileged_Rate * 100).toFixed(2)}%</p>
+                                                <p><strong>Unprivileged Rate:</strong> ${(metric.Unprivileged_Rate * 100).toFixed(2)}%</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>Statistical Parity Difference:</strong> ${metric.Statistical_Parity_Difference.toFixed(4)}</p>
+                                                <p><strong>Disparate Impact:</strong> ${metric.Disparate_Impact ? metric.Disparate_Impact.toFixed(4) : 'N/A'}</p>
+                                                <p><strong>Mean Difference:</strong> ${metric.Mean_Difference.toFixed(4)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        biasMetricsDiv.innerHTML = biasMetricsHTML;
+                    } else {
+                        biasMetricsDiv.innerHTML = `<h3>${attr} - Bias Metrics</h3><p>No bias metrics available for this attribute.</p>`;
+                    }
 
                     attrDiv.appendChild(overallDiv);
                     attrDiv.appendChild(groupDiv);
-                    attrDiv.appendChild(shapDiv);
+                    attrDiv.appendChild(biasMetricsDiv);
+                    attrDiv.appendChild(globalExplanationsDiv);
+                    attrDiv.appendChild(llmDiv);
                     resultsContent.appendChild(attrDiv);
                 }
                 

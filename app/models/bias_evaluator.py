@@ -7,7 +7,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
-import shap
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
@@ -18,6 +17,67 @@ import warnings
 from sklearn.exceptions import UndefinedMetricWarning
 warnings.filterwarnings("ignore")
 matplotlib.use("Agg")
+
+def classify_bias_level(statistical_parity_diff, disparate_impact, mean_diff):
+    """
+    Classify bias level based on statistical metrics.
+    
+    Returns:
+        - 'LOW': Minimal bias detected
+        - 'MEDIUM': Moderate bias detected  
+        - 'HIGH': Significant bias detected
+        - 'CRITICAL': Severe bias detected
+    """
+    # Initialize bias scores
+    bias_score = 0
+    
+    # Statistical Parity Difference scoring
+    # Values close to 0 indicate fairness
+    abs_spd = abs(statistical_parity_diff)
+    if abs_spd < 0.05:
+        bias_score += 0
+    elif abs_spd < 0.1:
+        bias_score += 1
+    elif abs_spd < 0.2:
+        bias_score += 2
+    else:
+        bias_score += 3
+    
+    # Disparate Impact scoring
+    # Values close to 1.0 indicate fairness
+    if disparate_impact is None or pd.isna(disparate_impact):
+        bias_score += 1
+    else:
+        di_ratio = min(disparate_impact, 1/disparate_impact) if disparate_impact > 0 else 0
+        if di_ratio > 0.8:
+            bias_score += 0
+        elif di_ratio > 0.6:
+            bias_score += 1
+        elif di_ratio > 0.4:
+            bias_score += 2
+        else:
+            bias_score += 3
+    
+    # Mean Difference scoring
+    abs_md = abs(mean_diff)
+    if abs_md < 0.05:
+        bias_score += 0
+    elif abs_md < 0.1:
+        bias_score += 1
+    elif abs_md < 0.2:
+        bias_score += 2
+    else:
+        bias_score += 3
+    
+    # Classify based on total bias score (0-9 scale)
+    if bias_score <= 2:
+        return 'LOW'
+    elif bias_score <= 4:
+        return 'MEDIUM'
+    elif bias_score <= 6:
+        return 'HIGH'
+    else:
+        return 'CRITICAL'
 
 def compute_bias_metrics(df: pd.DataFrame,
                         target_col: str,
@@ -65,13 +125,22 @@ def compute_bias_metrics(df: pd.DataFrame,
         priv_rate = df_for_aif[df_for_aif["prot_binary"] == 0]["label_num"].mean()
         unpriv_rate = df_for_aif[df_for_aif["prot_binary"] == 1]["label_num"].mean()
         
+        # Get bias metrics
+        spd = metric.statistical_parity_difference()
+        di = metric.disparate_impact()
+        md = metric.mean_difference()
+        
+        # Classify bias level
+        bias_level = classify_bias_level(spd, di, md)
+        
         results.append({
             "Category": category,
             "Privileged Rate": priv_rate,
             "Unprivileged Rate": unpriv_rate,
-            "Statistical Parity Difference": metric.statistical_parity_difference(),
-            "Disparate Impact": metric.disparate_impact(),
-            "Mean Difference": metric.mean_difference(),
+            "Statistical Parity Difference": spd,
+            "Disparate Impact": di,
+            "Mean Difference": md,
+            "Bias Level": bias_level
         })
     
     return pd.DataFrame(results)
@@ -86,7 +155,8 @@ def evaluate_model_bias(
     race_col: str = None,
     privileged_list: list = None,
     unprivileged_list: list = None,
-    global_shap: dict = None
+    global_shap: dict = None,
+    protected_columns: str = None
 ):
     """
     1) Trains a RandomForestClassifier (3‐class) on df[features] → df[target_col].
@@ -100,9 +170,26 @@ def evaluate_model_bias(
     data = df.dropna(subset=[target_col, protected_attr]).copy()
 
     # --- 1) Auto‐select features (everything except target + protected_attr + known ID columns)
-    # Only use SUSP_RACE, SUSP_SEX, VIC_RACE as features
-    selected_cat_features = ['SUSP_RACE', 'SUSP_SEX', 'VIC_RACE']
-    features = [c for c in selected_cat_features if c in data.columns]
+    # Use the protected columns from LLM recommendations instead of hardcoded features
+    if protected_columns:
+        # If protected_columns is available from LLM recommendations, use it
+        protected_cols = protected_columns.split(',') if isinstance(protected_columns, str) else protected_columns
+        features = [c.strip() for c in protected_cols if c.strip() in data.columns]
+    else:
+        # Fallback: look for common demographic columns
+        demographic_patterns = ['race', 'sex', 'gender', 'age', 'ethnic', 'descent', 'vict_', 'suspect']
+        features = []
+        for col in data.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in demographic_patterns):
+                features.append(col)
+    
+    # Ensure we have at least some features
+    if not features:
+        print("Warning: No demographic features found, using first 3 categorical columns")
+        cat_cols = data.select_dtypes(include=['object', 'category']).columns.tolist()
+        features = cat_cols[:3] if len(cat_cols) >= 3 else cat_cols
+    
     print("Selected categorical features for SHAP/model:", features)
 
     X_df     = data[features].copy()
@@ -204,58 +291,58 @@ def evaluate_model_bias(
     print(f"\n=== Metrics by {protected_attr} and Class ===")
     print(group_report)
 
-    # Only calculate SHAP if not provided
+    # Only calculate Global Explanations if not provided
     if global_shap is not None:
-        shap_tables = global_shap['shap_tables']
+        global_explanations = global_shap['global_explanations']
     else:
-        # --- 9) Build a SHAP TreeExplainer on the RF, using an Independent masker on X_train
-        masker = shap.maskers.Independent(X_train, max_samples=100)
-        explainer = shap.TreeExplainer(model, data=masker)
-        # Use a random sample of 10 rows from X_test for SHAP
-        n_samples = min(10, X_test.shape[0])
-        rng = np.random.default_rng(42)
-        sample_indices = rng.choice(X_test.shape[0], size=n_samples, replace=False)
-        X_shap = X_test[sample_indices]
-        sv = explainer(X_shap, check_additivity=False)
-        shap_tables = {}
+        # --- 9) Calculate Global Feature Importance from Random Forest
+        global_explanations = {}
+        
+        # Get feature importance for each class
         for class_idx in range(len(class_names)):
             cls_name = class_names[class_idx]
-            exp_cls = shap.Explanation(
-                sv.values[:, class_idx, :],
-                sv.base_values[:, class_idx],
-                data=X_shap,
-                feature_names=feature_names
-            )
-            n_test, n_feats = exp_cls.values.shape
-            row_ids = []
-            features_list = []
-            feat_values = []
-            base_values = []
-            shap_values = []
-            for i in range(n_test):
-                base_i = exp_cls.base_values[i]
-                for j in range(n_feats):
-                    row_ids.append(i)
-                    features_list.append(feature_names[j])
-                    feat_values.append(exp_cls.data[i, j])
-                    base_values.append(base_i)
-                    shap_values.append(exp_cls.values[i, j])
-            df_shap = pd.DataFrame({
-                'row_id': row_ids,
-                'feature': features_list,
-                'feature_value': feat_values,
-                'base_value': base_values,
-                'shap_value': shap_values
-            })
-            print(f"SHAP table sample for class {cls_name}:")
-            print(df_shap.head())
-
-            shap_tables[cls_name] = df_shap
-            # One way: show the unique feature names in df_shap
-            print(sorted(df_shap['feature'].unique()))
-
-# Or, directly filter for rows where feature starts with 'cat__'
-            print(df_shap[df_shap['feature'].str.startswith('cat__')].head())
+            
+            try:
+                # Get feature importance for this class
+                if hasattr(model, 'estimators_'):
+                    # For Random Forest, we can get feature importance per class
+                    class_importance = np.zeros(len(feature_names))
+                    for estimator in model.estimators_:
+                        # Get feature importance from each tree
+                        tree_importance = estimator.feature_importances_
+                        if len(tree_importance) == len(feature_names):
+                            class_importance += tree_importance
+                    class_importance /= len(model.estimators_)
+                else:
+                    # Fallback: use overall feature importance
+                    class_importance = model.feature_importances_
+                
+                # Create global explanation table
+                explanation_data = []
+                for i, (feature, importance) in enumerate(zip(feature_names, class_importance)):
+                    explanation_data.append({
+                        'feature': feature,
+                        'importance': float(importance),
+                        'rank': i + 1
+                    })
+                
+                # Sort by importance (descending)
+                explanation_data.sort(key=lambda x: x['importance'], reverse=True)
+                
+                df_explanation = pd.DataFrame(explanation_data)
+                print(f"Global explanation for class {cls_name}:")
+                print(df_explanation.head())
+                
+                global_explanations[cls_name] = df_explanation
+                
+            except Exception as e:
+                print(f"Error calculating global explanation for class {cls_name}: {e}")
+                # Create an empty explanation table for this class
+                global_explanations[cls_name] = pd.DataFrame({
+                    'feature': [],
+                    'importance': [],
+                    'rank': []
+                })
 
     # Compute bias_metrics only for race column
     bias_metrics = None
@@ -263,4 +350,4 @@ def evaluate_model_bias(
         if protected_attr == race_col:
             bias_metrics = compute_bias_metrics(df, target_col, race_col, privileged_list, unprivileged_list)
     
-    return model, preprocessor, overall, group_report, shap_tables, bias_metrics
+    return model, preprocessor, overall, group_report, global_explanations, bias_metrics

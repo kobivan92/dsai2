@@ -73,7 +73,7 @@ def get_llm_recommendations(columns_description, df, llm_model='llama_3_3'):
             {"role": "user", "content": f"""The dataset has these columns (with context):
 {columns_description}
 
-Identify which columns are specifically related to race and gender for bias estimation.
+Identify which columns are specifically related to race, ethnicity, gender, age that could introduce bias in machine learning models.
 RESPOND WITH ONLY THE COLUMN NAMES, SEPARATED BY COMMAS. NO EXPLANATIONS."""}
         ],
         "stream": False
@@ -86,10 +86,31 @@ RESPOND WITH ONLY THE COLUMN NAMES, SEPARATED BY COMMAS. NO EXPLANATIONS."""}
         raise Exception(f"Invalid response from {llm_model}: {response1_json}")
     protected_columns = extract_column_list(response1_json['choices'][0]['message']['content'].strip())
     
+    # Validate that protected columns exist in dataframe
+    if protected_columns:
+        protected_cols_list = [col.strip() for col in protected_columns.split(',')]
+        valid_protected_cols = [col for col in protected_cols_list if col in df.columns]
+        if valid_protected_cols:
+            protected_columns = ', '.join(valid_protected_cols)
+        else:
+            print(f"Warning: None of the LLM-identified protected columns exist in dataframe. Using fallback.")
+            protected_columns = None
+    
+    # Fallback: if no protected columns identified, use common patterns
+    if not protected_columns or protected_columns.strip() == '':
+        print(f"LLM failed to identify protected columns for {llm_model}, using fallback patterns")
+        protected_patterns = ['race', 'sex', 'gender', 'age', 'ethnic', 'descent', 'vict_', 'suspect']
+        protected_columns = []
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in protected_patterns):
+                protected_columns.append(col)
+        protected_columns = ', '.join(protected_columns) if protected_columns else 'Vict Sex, Vict Descent'
+    
     # 2. Identify the target variable (assumed to be LAW_CAT_CD or similar)
     second_prompt = f"""I have identified these protected/bias-related columns: {protected_columns}
 
-Among ALL the original dataset columns, which ONE column should be the target variable for bias evaluation?
+Among ALL the original dataset columns, which ONE column should be the target variable for bias evaluation? Look for columns that represent outcomes, classifications, or predictions that could be biased.
 RESPOND WITH ONLY THE COLUMN NAME. NO EXPLANATIONS."""
     payload2 = {
         "messages": [
@@ -108,9 +129,49 @@ RESPOND WITH ONLY THE COLUMN NAME. NO EXPLANATIONS."""
         raise Exception(f"Invalid response from {llm_model}: {response2_json}")
     target_column = extract_column_name(response2_json['choices'][0]['message']['content'].strip())
     
+    # Fallback: if no target column identified, use common patterns
+    if not target_column or target_column.strip() == '':
+        print(f"LLM failed to identify target column for {llm_model}, using fallback patterns")
+        target_patterns = ['status', 'crime', 'crm_cd', 'law_cat', 'part_1_2', 'outcome', 'result']
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in target_patterns):
+                target_column = col
+                break
+        if not target_column:
+            # Use the first categorical column that's not protected
+            for col in df.columns:
+                if col not in protected_columns and df[col].dtype == 'object':
+                    target_column = col
+                    break
+        if not target_column:
+            target_column = df.columns[0]  # Last resort
+    
     # 3. Calculate correlations and identify columns to exclude
     exclude = {target_column} | set(c.strip() for c in protected_columns.split(','))
     feature_columns = [col for col in df.columns if col not in exclude]
+    
+    # Validate that target_column exists in dataframe
+    if target_column not in df.columns:
+        print(f"Warning: Target column '{target_column}' not found in dataframe. Using fallback.")
+        # Try to find a suitable target column
+        target_patterns = ['status', 'crime', 'crm_cd', 'law_cat', 'part_1_2', 'outcome', 'result']
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in target_patterns):
+                target_column = col
+                break
+        if target_column not in df.columns:
+            # Use the first categorical column that's not protected
+            for col in df.columns:
+                if col not in protected_columns and df[col].dtype == 'object':
+                    target_column = col
+                    break
+        if target_column not in df.columns:
+            target_column = df.columns[0]  # Last resort
+        # Recalculate exclude and feature_columns
+        exclude = {target_column} | set(c.strip() for c in protected_columns.split(','))
+        feature_columns = [col for col in df.columns if col not in exclude]
     
     # Encode target if categorical
     y = df[target_column].astype(str)
@@ -160,12 +221,18 @@ RESPOND WITH ONLY THE COLUMN NAMES, SEPARATED BY COMMAS. NO EXPLANATIONS."""
         raise Exception(f"Invalid response from {llm_model}: {response3_json}")
     excluded_columns = extract_column_list(response3_json['choices'][0]['message']['content'].strip())
     
+    # Validate that excluded columns exist in dataframe
+    if excluded_columns:
+        excluded_cols_list = [col.strip() for col in excluded_columns.split(',')]
+        valid_excluded_cols = [col for col in excluded_cols_list if col in df.columns]
+        excluded_columns = ', '.join(valid_excluded_cols) if valid_excluded_cols else ''
+    
     # 4. Identify which column is the race column for suspects
     fourth_prompt = f"""Dataset columns: {columns_description}
 
 Protected columns: {protected_columns}
 
-Which column represents suspect's race?
+Which column represents race, ethnicity, or descent information? This could be for victims, suspects, or general demographic data.
 RESPOND WITH ONLY THE COLUMN NAME. NO EXPLANATIONS."""
     payload4 = {
         "messages": [
@@ -182,7 +249,44 @@ RESPOND WITH ONLY THE COLUMN NAME. NO EXPLANATIONS."""
         raise Exception(f"Invalid response from {llm_model}: {response4_json}")
     race_column = extract_column_name(response4_json['choices'][0]['message']['content'].strip())
     
+    # Fallback: if no race column identified, use common patterns
+    if not race_column or race_column.strip() == '':
+        print(f"LLM failed to identify race column for {llm_model}, using fallback patterns")
+        race_patterns = ['race', 'ethnic', 'descent', 'vict_descent']
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in race_patterns):
+                race_column = col
+                break
+        if not race_column:
+            # Use the first protected column that might be race-related
+            protected_cols = [c.strip() for c in protected_columns.split(',')]
+            for col in protected_cols:
+                if col in df.columns and any(pattern in col.lower() for pattern in ['descent', 'race', 'ethnic']):
+                    race_column = col
+                    break
+            if race_column not in df.columns:
+                race_column = df.columns[0]  # Absolute last resort
+    
     # 5. Fetch unique values for that race column, then ask LLM to split into privileged/unprivileged lists
+    # Ensure race_column exists in dataframe
+    if race_column not in df.columns:
+        print(f"Warning: Race column '{race_column}' not found in dataframe. Using fallback.")
+        # Try to find a suitable race column
+        for col in df.columns:
+            if any(pattern in col.lower() for pattern in ['descent', 'race', 'ethnic']):
+                race_column = col
+                break
+        if race_column not in df.columns:
+            # Last resort: use first protected column
+            protected_cols = [c.strip() for c in protected_columns.split(',')]
+            for col in protected_cols:
+                if col in df.columns:
+                    race_column = col
+                    break
+            if race_column not in df.columns:
+                race_column = df.columns[0]  # Absolute last resort
+    
     unique_races = df[race_column].dropna().unique().tolist()
     fifth_prompt = f"""Column "{race_column}" has these values: {unique_races}
 
@@ -245,6 +349,26 @@ NO EXPLANATIONS, ONLY THE JSON."""
             privileged_list = []
             unprivileged_list = []
     
+    # Fallback: if no privileged/unprivileged lists, create simple split
+    if not privileged_list and not unprivileged_list and unique_races:
+        print(f"LLM failed to provide privileged/unprivileged groups for {llm_model}, using fallback split")
+        # Simple heuristic: split by common patterns
+        privileged_patterns = ['white', 'w', 'asian', 'a']
+        unprivileged_patterns = ['black', 'b', 'hispanic', 'h', 'latino', 'l']
+        
+        for race in unique_races:
+            race_str = str(race).lower()
+            if any(pattern in race_str for pattern in privileged_patterns):
+                privileged_list.append(race)
+            elif any(pattern in race_str for pattern in unprivileged_patterns):
+                unprivileged_list.append(race)
+        
+        # If still empty, use first half as privileged, second half as unprivileged
+        if not privileged_list and not unprivileged_list:
+            mid = len(unique_races) // 2
+            privileged_list = unique_races[:mid]
+            unprivileged_list = unique_races[mid:]
+    
     return {
         'protected_columns': protected_columns,
         'target_column': target_column,
@@ -255,8 +379,8 @@ NO EXPLANATIONS, ONLY THE JSON."""
         'unprivileged_list': unprivileged_list
     }
 
-def get_llm_bias_check(protected_attr, analysis_summary, shap_table=None, llm_model='llama_3_3'):
-    """Send the analysis summary and SHAP table for a protected attribute to the LLM and get a bias detection response."""
+def get_llm_bias_check(protected_attr, analysis_summary, global_explanations=None, llm_model='llama_3_3'):
+    """Send the analysis summary and Global Explanations for a protected attribute to the LLM and get a bias detection response."""
     endpoint = LLM_ENDPOINTS[llm_model]
     url = endpoint['url']
     headers = endpoint['headers']
@@ -266,10 +390,28 @@ You are a fairness and bias analysis expert. Here is the bias and classification
 
 {analysis_summary}
 """
-    if shap_table is not None:
-        prompt += f"\nSHAP Feature Importance Table:\n{shap_table}\n"
-        prompt += "\nPlease analyze also the SHAP table for evidence of bias."
-    prompt += "\nPlease only detect and describe any potential biases or fairness issues. Do not provide recommendations or mitigation steps."
+    if global_explanations is not None:
+        prompt += f"\nGlobal Feature Importance Analysis:\n{global_explanations}\n"
+        prompt += "\nPlease analyze the global feature importance for evidence of bias. Look for features that might be proxies for protected attributes or show unfair influence on predictions."
+    
+    prompt += """
+
+Please provide a comprehensive bias analysis including:
+
+1. **Bias Level Classification**: 
+   - LOW: Minimal bias detected (metrics within acceptable ranges)
+   - MEDIUM: Moderate bias detected (some concerning patterns)
+   - HIGH: Significant bias detected (clear unfair treatment)
+   - CRITICAL: Severe bias detected (major fairness violations)
+
+2. **Specific Bias Patterns**: Identify any specific patterns of unfair treatment across different groups.
+
+3. **Feature Influence**: Analyze how protected attributes or their proxies influence predictions.
+
+4. **Risk Assessment**: Evaluate the potential impact of detected biases.
+
+Please format your response with clear sections for each of these points. Do not provide recommendations or mitigation steps - focus only on detection and analysis."""
+    
     payload = {
         "messages": [
             {"role": "user", "content": prompt}
@@ -284,8 +426,8 @@ You are a fairness and bias analysis expert. Here is the bias and classification
         raise Exception(f"Invalid response from {llm_model}: {response_json}")
     return response_json['choices'][0]['message']['content'].strip()
 
-def get_llm_bias_check_multi(protected_attr, analysis_summary, shap_table=None, llm_models=['llama_3_3', 'deepseek_r1', 'mistral_nemo']):
-    """Send the analysis summary and SHAP table for a protected attribute to multiple LLMs and get bias detection responses."""
+def get_llm_bias_check_multi(protected_attr, analysis_summary, global_explanations=None, llm_models=['llama_3_3', 'deepseek_r1', 'mistral_nemo']):
+    """Send the analysis summary and Global Explanations for a protected attribute to multiple LLMs and get bias detection responses."""
     results = {}
     
     # Skip mistral_nemo if it's causing issues (can be enabled later)
@@ -314,7 +456,7 @@ def get_llm_bias_check_multi(protected_attr, analysis_summary, shap_table=None, 
                     time.sleep(retry_delay)
                     
                 print(f"Getting bias check from {model} (attempt {attempt + 1})...")
-                result = get_llm_bias_check(protected_attr, analysis_summary, shap_table, model)
+                result = get_llm_bias_check(protected_attr, analysis_summary, global_explanations, model)
                 results[model] = result
                 print(f"Successfully got bias check from {model}")
                 break  # Success, exit retry loop
