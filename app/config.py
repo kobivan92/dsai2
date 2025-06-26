@@ -14,10 +14,10 @@ LLM_ENDPOINTS = {
         }
     },
     'mistral_nemo': {
-        'url': "https://zmtfbikxvnuldgj6piuxg7qf.agents.do-ai.run/api/v1/chat/completions",
+        'url': "https://zfrgxxvtr7esltmwnzk7noaz.agents.do-ai.run/api/v1/chat/completions",
         'headers': {
             "Content-Type": "application/json",
-            "Authorization": "Bearer Cko36hAqnC8xfUkCnT2-Up47IzaHvQdf"
+            "Authorization": "Bearer Y_77OUn-k98pPDrxDiV9SI1TUXC4STQM"
         }
     }
 } 
