@@ -1,6 +1,65 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+.comparison-table th {
+    font-size: 0.9em;
+    white-space: nowrap;
+    vertical-align: middle;
+    text-align: center;
+}
+.comparison-table td {
+    font-size: 0.85em;
+    max-width: 200px;
+    word-wrap: break-word;
+    vertical-align: middle;
+}
+.comparison-table .table-danger {
+    background-color: #f8d7da !important;
+}
+.comparison-table .badge {
+    font-size: 0.75em;
+}
+.detailed-results {
+    margin-top: 2rem;
+}
+.detailed-results h5 {
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+.bias-comparison-table {
+    margin-bottom: 2rem;
+}
+.bias-comparison-table th {
+    background-color: #343a40;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+}
+.bias-comparison-table .bias-level-high {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.bias-comparison-table .bias-level-moderate {
+    background-color: #fff3cd;
+    color: #856404;
+}
+.bias-comparison-table .bias-level-low {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+.bias-comparison-table .bias-level-fair {
+    background-color: #d4edda;
+    color: #155724;
+}
+.key-findings-cell {
+    max-width: 300px;
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+</style>
+
 <h1 class="mb-4">Bias Analysis Tool</h1>
 
 <form id="analysisForm" class="mb-4">
@@ -41,6 +100,16 @@
             <option value="{{ model }}">{{ model }}</option>
             {% endfor %}
         </select>
+    </div>
+    
+    <div class="mb-3">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="use_multi_llm" name="use_multi_llm">
+            <label class="form-check-label" for="use_multi_llm">
+                Use all 3 LLMs for analysis (get results from llama_3_3, deepseek_r1, and mistral_nemo)
+            </label>
+        </div>
+        <div class="form-text">When enabled, the analysis will use all available LLM models and provide a comparison of their recommendations and bias assessments.</div>
     </div>
     
     <button type="submit" class="btn btn-primary">Analyze</button>
@@ -96,7 +165,121 @@ function displayRecommendations(recommendations) {
     // Clear previous content
     document.getElementById('recommendations').innerHTML = '<h3>LLM Recommendations</h3>';
     
-    // Basic recommendations
+    // Check if this is multi-LLM results
+    if (typeof recommendations === 'object' && Object.keys(recommendations).length > 1 && !recommendations.target_column) {
+        // Multi-LLM results - create comparison table
+        let content = '<div class="mb-3"><strong>Multi-LLM Analysis Results:</strong></div>';
+        
+        // Create comparison table
+        content += `
+            <div class="table-responsive mb-4">
+                <table class="table table-striped table-hover comparison-table">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Model</th>
+                            <th>Target Column</th>
+                            <th>Protected Attributes</th>
+                            <th>Excluded Columns</th>
+                            <th>Race Column</th>
+                            <th>Privileged Groups</th>
+                            <th>Unprivileged Groups</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        for (const [model, result] of Object.entries(recommendations)) {
+            if (result.error) {
+                content += `
+                    <tr class="table-danger">
+                        <td><strong>${model}</strong></td>
+                        <td colspan="6">Error: ${result.error}</td>
+                        <td><span class="badge bg-danger">Failed</span></td>
+                    </tr>
+                `;
+            } else {
+                const privilegedGroups = result.privileged_list && result.privileged_list.length > 0 ? 
+                    result.privileged_list.join(', ') : 'N/A';
+                const unprivilegedGroups = result.unprivileged_list && result.unprivileged_list.length > 0 ? 
+                    result.unprivileged_list.join(', ') : 'N/A';
+                
+                content += `
+                    <tr>
+                        <td><strong>${model}</strong></td>
+                        <td>${result.target_column || 'N/A'}</td>
+                        <td>${result.protected_columns || 'N/A'}</td>
+                        <td>${result.excluded_columns || 'N/A'}</td>
+                        <td>${result.race_column || 'N/A'}</td>
+                        <td>${privilegedGroups}</td>
+                        <td>${unprivilegedGroups}</td>
+                        <td><span class="badge bg-success">Success</span></td>
+                    </tr>
+                `;
+            }
+        }
+        
+        content += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        // Add detailed results for each model
+        content += '<div class="detailed-results"><h4>Detailed Results:</h4>';
+        for (const [model, result] of Object.entries(recommendations)) {
+            if (result.error) {
+                content += `
+                    <div class="mb-4 p-3 border rounded">
+                        <h5 class="text-danger">${model} - Error</h5>
+                        <div class="alert alert-danger">${result.error}</div>
+                    </div>
+                `;
+            } else {
+                content += `
+                    <div class="mb-4 p-3 border rounded">
+                        <h5 class="text-primary">${model}</h5>
+                        <div class="mb-2"><strong>Target Column:</strong> ${result.target_column}</div>
+                        <div class="mb-2"><strong>Protected Attributes:</strong> ${result.protected_columns}</div>
+                        <div class="mb-2"><strong>Excluded Columns:</strong> ${result.excluded_columns}</div>
+                        <div class="mb-2"><strong>Race Column:</strong> ${result.race_column || 'N/A'}</div>
+                        ${result.privileged_list && result.privileged_list.length > 0 ? 
+                            `<div class="mb-2"><strong>Privileged Groups:</strong> ${result.privileged_list.join(', ')}</div>` : ''}
+                        ${result.unprivileged_list && result.unprivileged_list.length > 0 ? 
+                            `<div class="mb-2"><strong>Unprivileged Groups:</strong> ${result.unprivileged_list.join(', ')}</div>` : ''}
+                        <div class="mb-2"><strong>Top Correlated Features:</strong></div>
+                        <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 0.9em;">${result.correlations}</pre>
+                    </div>
+                `;
+            }
+        }
+        
+        content += '</div>'; // Close detailed-results div
+        
+        // Add summary of differences
+        content += '<div class="mt-4"><h4>Key Differences Summary:</h4>';
+        const successfulModels = Object.entries(recommendations).filter(([_, result]) => !result.error);
+        if (successfulModels.length > 1) {
+            const targets = successfulModels.map(([_, result]) => result.target_column);
+            const uniqueTargets = [...new Set(targets)];
+            if (uniqueTargets.length > 1) {
+                content += `<div class="alert alert-warning"><strong>Target Column Disagreement:</strong> Models suggest different target columns: ${uniqueTargets.join(', ')}</div>`;
+            }
+            
+            const protectedAttrs = successfulModels.map(([_, result]) => result.protected_columns);
+            const uniqueProtected = [...new Set(protectedAttrs)];
+            if (uniqueProtected.length > 1) {
+                content += `<div class="alert alert-info"><strong>Protected Attributes Variation:</strong> Different models identified different protected attributes</div>`;
+            }
+        }
+        content += '</div>';
+        
+        document.getElementById('recommendations').insertAdjacentHTML('beforeend', content);
+        document.getElementById('recommendations').style.display = 'block';
+        return;
+    }
+    
+    // Single LLM results (original logic)
     let content = `
         <div class="mb-3">
             <strong>Target Column:</strong>
@@ -189,6 +372,92 @@ function displayResults(result) {
         resultsDiv.innerHTML = '<div class="alert alert-warning">No analysis results to display.</div>';
         return;
     }
+    
+    // Create Multi-LLM Bias Analysis Comparison Table
+    let hasMultiLLMBias = false;
+    for (const [attr, data] of Object.entries(result.results)) {
+        if (data.llm_bias_check && typeof data.llm_bias_check === 'object' && Object.keys(data.llm_bias_check).length > 1) {
+            hasMultiLLMBias = true;
+            break;
+        }
+    }
+    
+    if (hasMultiLLMBias) {
+        let comparisonContent = `
+            <div class="mb-5">
+                <h2 class="mb-4">Multi-LLM Bias Analysis Comparison</h2>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover comparison-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Protected Attribute</th>
+                                <th>LLM Model</th>
+                                <th>Bias Analysis Status</th>
+                                <th>Key Findings</th>
+                                <th>Bias Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        for (const [attr, data] of Object.entries(result.results)) {
+            if (data.llm_bias_check && typeof data.llm_bias_check === 'object' && Object.keys(data.llm_bias_check).length > 1) {
+                for (const [model, biasAnalysis] of Object.entries(data.llm_bias_check)) {
+                    if (biasAnalysis.error) {
+                        comparisonContent += `
+                            <tr class="table-danger">
+                                <td><strong>${attr}</strong></td>
+                                <td><strong>${model}</strong></td>
+                                <td><span class="badge bg-danger">Failed</span></td>
+                                <td colspan="2">Error: ${biasAnalysis.error}</td>
+                            </tr>
+                        `;
+                    } else {
+                        // Extract key findings and bias level from the analysis
+                        const analysis = biasAnalysis.toString();
+                        const keyFindings = analysis.length > 200 ? analysis.substring(0, 200) + '...' : analysis;
+                        
+                        // Determine bias level based on keywords
+                        let biasLevel = 'Unknown';
+                        let badgeClass = 'bg-secondary';
+                        if (analysis.toLowerCase().includes('significant bias') || analysis.toLowerCase().includes('high bias')) {
+                            biasLevel = 'High';
+                            badgeClass = 'bg-danger';
+                        } else if (analysis.toLowerCase().includes('moderate bias') || analysis.toLowerCase().includes('some bias')) {
+                            biasLevel = 'Moderate';
+                            badgeClass = 'bg-warning';
+                        } else if (analysis.toLowerCase().includes('low bias') || analysis.toLowerCase().includes('minimal bias')) {
+                            biasLevel = 'Low';
+                            badgeClass = 'bg-info';
+                        } else if (analysis.toLowerCase().includes('no bias') || analysis.toLowerCase().includes('fair')) {
+                            biasLevel = 'Fair';
+                            badgeClass = 'bg-success';
+                        }
+                        
+                        comparisonContent += `
+                            <tr>
+                                <td><strong>${attr}</strong></td>
+                                <td><strong>${model}</strong></td>
+                                <td><span class="badge bg-success">Success</span></td>
+                                <td style="max-width: 300px; word-wrap: break-word;">${keyFindings}</td>
+                                <td><span class="badge ${badgeClass}">${biasLevel}</span></td>
+                            </tr>
+                        `;
+                    }
+                }
+            }
+        }
+        
+        comparisonContent += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        resultsDiv.innerHTML = comparisonContent;
+    }
+    
     // Create container for each protected attribute
     for (const [attr, data] of Object.entries(result.results)) {
         const attrContainer = document.createElement('div');
@@ -204,10 +473,58 @@ function displayResults(result) {
         if (data.llm_bias_check) {
             const llmSection = document.createElement('div');
             llmSection.className = 'mb-4';
+            
+            // Check if this is multi-LLM bias analysis
+            if (typeof data.llm_bias_check === 'object' && Object.keys(data.llm_bias_check).length > 1) {
+                let llmContent = '<h4 class="mb-3">Multi-LLM Bias Analysis</h4>';
+                
+                // Create a side-by-side comparison table for this attribute
+                llmContent += `
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-primary">
+                                <tr>
+                                    <th>LLM Model</th>
+                                    <th>Bias Analysis</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                for (const [model, biasAnalysis] of Object.entries(data.llm_bias_check)) {
+                    if (biasAnalysis.error) {
+                        llmContent += `
+                            <tr class="table-danger">
+                                <td><strong>${model}</strong></td>
+                                <td colspan="2">Error: ${biasAnalysis.error}</td>
+                            </tr>
+                        `;
+                    } else {
+                        llmContent += `
+                            <tr>
+                                <td><strong>${model}</strong></td>
+                                <td style="white-space: pre-line; max-width: 400px;">${biasAnalysis}</td>
+                                <td><span class="badge bg-success">Success</span></td>
+                            </tr>
+                        `;
+                    }
+                }
+                
+                llmContent += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                llmSection.innerHTML = llmContent;
+            } else {
+                // Single LLM bias analysis
             llmSection.innerHTML = `
                 <h4 class="mb-3">LLM Bias Check</h4>
                 <div class="alert alert-info" style="white-space: pre-line;">${data.llm_bias_check}</div>
             `;
+            }
             attrContainer.appendChild(llmSection);
         }
 
@@ -356,7 +673,14 @@ document.getElementById('analysisForm').addEventListener('submit', async (e) => 
         validatedFormData.append('test_size', testSize);
         validatedFormData.append('max_categories', maxCategories);
         
-        const response = await fetch('/analyze', {
+        // Check if multi-LLM is enabled
+        const useMultiLLM = document.getElementById('use_multi_llm').checked;
+        validatedFormData.append('use_multi_llm', useMultiLLM);
+        
+        // Choose endpoint based on multi-LLM setting
+        const endpoint = useMultiLLM ? '/analyze_multi' : '/analyze';
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             body: validatedFormData
         });
