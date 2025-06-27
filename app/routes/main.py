@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify
 import pandas as pd
 import os
 from app.utils.llm_utils import get_llm_recommendations, get_llm_bias_check, get_llm_recommendations_multi, get_llm_bias_check_multi
-from app.models.bias_evaluator import evaluate_model_bias
+from app.models.bias_evaluator import evaluate_model_bias, compute_bias_metrics
 import logging
 from app.config import LLM_ENDPOINTS
 
@@ -13,8 +13,10 @@ UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+# Enable detailed logging
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+log.setLevel(logging.INFO)
 
 @bp.route('/')
 def home():
@@ -82,7 +84,12 @@ def analyze():
             max_categories=max_categories,
             protected_columns=llm_recommendations['protected_columns']
         )
-        global_explanations_data = {'global_explanations': global_explanations}
+        
+        # Log Global Explanations info
+        print(f"Global Explanations calculated: {len(global_explanations) if global_explanations else 0} classes")
+        if global_explanations:
+            for cls, exp_df in global_explanations.items():
+                print(f"  Class {cls}: {len(exp_df)} features")
         
         # Process each protected attribute
         results = {}
@@ -90,35 +97,50 @@ def analyze():
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
-                model, preprocessor, overall, group_report, _, bias_metrics = evaluate_model_bias(
-                    df,
-                    target_col=target_column,
-                    protected_attr=attr,
-                    test_size=test_size,
-                    max_categories=max_categories,
-                    race_col=race_col,
-                    privileged_list=privileged_list,
-                    unprivileged_list=unprivileged_list,
-                    global_shap=None,
-                    protected_columns=llm_recommendations['protected_columns']
-                )
+                # Reuse the same model and global explanations for all attributes
+                # Only recalculate bias metrics if needed
+                bias_metrics = None
+                if race_col is not None and privileged_list is not None and unprivileged_list is not None:
+                    if attr == race_col:
+                        bias_metrics = compute_bias_metrics(df, target_column, race_col, privileged_list, unprivileged_list)
+                
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
+                
                 summary = f"Overall:\n{overall.to_string()}\n\nGroup-wise:\n{group_report.to_string()}"
                 if bias_metrics is not None:
                     summary += f"\n\nBias Metrics:\n{bias_metrics.to_string()}"
                 
-                # Format global explanations for LLM
+                # Format global explanations for LLM with better structure
                 global_explanations_str = ""
                 if global_explanations:
+                    global_explanations_str += "\n=== GLOBAL FEATURE IMPORTANCE ANALYSIS ===\n"
                     for cls, exp_df in global_explanations.items():
-                        global_explanations_str += f"\nClass: {cls}\n{exp_df.to_string(index=False)}\n"
+                        if isinstance(exp_df, pd.DataFrame) and not exp_df.empty:
+                            global_explanations_str += f"\nClass: {cls}\n"
+                            global_explanations_str += f"Top 5 Most Important Features:\n"
+                            for idx, row in exp_df.head(5).iterrows():
+                                percentage = (row['importance'] * 100)
+                                global_explanations_str += f"  {row['rank']}. {row['feature']}: {row['importance']:.4f} ({percentage:.1f}%)\n"
+                            global_explanations_str += "\n"
                 
                 llm_bias_check = get_llm_bias_check(attr, summary, global_explanations=global_explanations_str if global_explanations_str else None, llm_model=llm_model)
+                
+                # Convert global explanations to dict format for frontend
+                global_explanations_dict = {}
+                if global_explanations:
+                    for k, v in global_explanations.items():
+                        if isinstance(v, pd.DataFrame):
+                            global_explanations_dict[k] = v.to_dict('records')
+                        else:
+                            global_explanations_dict[k] = v
+                
+                print(f"Global Explanations for {attr}: {len(global_explanations_dict)} classes")
+                
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
-                    'global_explanations': {k: v.to_dict('records') for k, v in global_explanations.items()},
+                    'global_explanations': global_explanations_dict,
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
                     'llm_bias_check': llm_bias_check
                 }
@@ -210,7 +232,12 @@ def analyze_multi():
             max_categories=max_categories,
             protected_columns=successful_recommendations['protected_columns']
         )
-        global_explanations_data = {'global_explanations': global_explanations}
+        
+        # Log Global Explanations info
+        print(f"Global Explanations calculated: {len(global_explanations) if global_explanations else 0} classes")
+        if global_explanations:
+            for cls, exp_df in global_explanations.items():
+                print(f"  Class {cls}: {len(exp_df)} features")
         
         # Process each protected attribute
         results = {}
@@ -218,39 +245,53 @@ def analyze_multi():
         for attr in protected_attributes:
             attr = attr.strip()
             if attr in df.columns:
-                model, preprocessor, overall, group_report, _, bias_metrics = evaluate_model_bias(
-                    df,
-                    target_col=target_column,
-                    protected_attr=attr,
-                    test_size=test_size,
-                    max_categories=max_categories,
-                    race_col=race_col,
-                    privileged_list=privileged_list,
-                    unprivileged_list=unprivileged_list,
-                    global_shap=None,
-                    protected_columns=successful_recommendations['protected_columns']
-                )
+                # Reuse the same model and global explanations for all attributes
+                # Only recalculate bias metrics if needed
+                bias_metrics = None
+                if race_col is not None and privileged_list is not None and unprivileged_list is not None:
+                    if attr == race_col:
+                        bias_metrics = compute_bias_metrics(df, target_column, race_col, privileged_list, unprivileged_list)
+                
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
+                
                 summary = f"Overall:\n{overall.to_string()}\n\nGroup-wise:\n{group_report.to_string()}"
                 if bias_metrics is not None:
                     summary += f"\n\nBias Metrics:\n{bias_metrics.to_string()}"
                 
-                # Format global explanations for LLM
+                # Format global explanations for LLM with better structure
                 global_explanations_str = ""
                 if global_explanations:
+                    global_explanations_str += "\n=== GLOBAL FEATURE IMPORTANCE ANALYSIS ===\n"
                     for cls, exp_df in global_explanations.items():
-                        global_explanations_str += f"\nClass: {cls}\n{exp_df.to_string(index=False)}\n"
+                        if isinstance(exp_df, pd.DataFrame) and not exp_df.empty:
+                            global_explanations_str += f"\nClass: {cls}\n"
+                            global_explanations_str += f"Top 5 Most Important Features:\n"
+                            for idx, row in exp_df.head(5).iterrows():
+                                percentage = (row['importance'] * 100)
+                                global_explanations_str += f"  {row['rank']}. {row['feature']}: {row['importance']:.4f} ({percentage:.1f}%)\n"
+                            global_explanations_str += "\n"
                 
                 # Get bias analysis from all LLMs
                 print(f"Getting multi-LLM bias analysis for {attr}...")
                 llm_bias_check_multi = get_llm_bias_check_multi(attr, summary, global_explanations=global_explanations_str if global_explanations_str else None)
                 llm_bias_check = llm_bias_check_multi
                 
+                # Convert global explanations to dict format for frontend
+                global_explanations_dict = {}
+                if global_explanations:
+                    for k, v in global_explanations.items():
+                        if isinstance(v, pd.DataFrame):
+                            global_explanations_dict[k] = v.to_dict('records')
+                        else:
+                            global_explanations_dict[k] = v
+                
+                print(f"Global Explanations for {attr}: {len(global_explanations_dict)} classes")
+                
                 results[attr] = {
                     'overall': overall.to_dict(),
                     'group_report': group_report.to_dict('records'),
-                    'global_explanations': {k: v.to_dict('records') for k, v in global_explanations.items()},
+                    'global_explanations': global_explanations_dict,
                     'bias_metrics': bias_metrics.to_dict('records') if bias_metrics is not None else None,
                     'llm_bias_check': llm_bias_check
                 }

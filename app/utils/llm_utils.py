@@ -170,8 +170,8 @@ RESPOND WITH ONLY THE COLUMN NAME. NO EXPLANATIONS."""
         if target_column not in df.columns:
             target_column = df.columns[0]  # Last resort
         # Recalculate exclude and feature_columns
-        exclude = {target_column} | set(c.strip() for c in protected_columns.split(','))
-        feature_columns = [col for col in df.columns if col not in exclude]
+    exclude = {target_column} | set(c.strip() for c in protected_columns.split(','))
+    feature_columns = [col for col in df.columns if col not in exclude]
     
     # Encode target if categorical
     y = df[target_column].astype(str)
@@ -335,14 +335,8 @@ NO EXPLANATIONS, ONLY THE JSON."""
                 if start != -1 and end != 0:
                     dict_str = lists_json[start:end]
                     parsed_py = ast.literal_eval(dict_str)
-                    privileged_list = parsed_py.get("privileged_list", [])
-                    unprivileged_list = parsed_py.get("unprivileged_list", [])
-                else:
-                    privileged_list = []
-                    unprivileged_list = []
-            else:
-                privileged_list = []
-                unprivileged_list = []
+            privileged_list = parsed_py.get("privileged_list", [])
+            unprivileged_list = parsed_py.get("unprivileged_list", [])
         except (SyntaxError, ValueError) as e2:
             print(f"AST literal_eval error for {llm_model}: {e2}")
             # If both parsing attempts fail, use empty lists
@@ -391,8 +385,25 @@ You are a fairness and bias analysis expert. Here is the bias and classification
 {analysis_summary}
 """
     if global_explanations is not None:
-        prompt += f"\nGlobal Feature Importance Analysis:\n{global_explanations}\n"
-        prompt += "\nPlease analyze the global feature importance for evidence of bias. Look for features that might be proxies for protected attributes or show unfair influence on predictions."
+        prompt += f"""
+
+=== GLOBAL FEATURE IMPORTANCE ANALYSIS ===
+{global_explanations}
+
+Please carefully analyze the global feature importance data above. Focus on:
+
+1. **Feature Ranking Patterns**: Which features are consistently important across classes vs. class-specific?
+2. **Bias Indicators**: Look for features that might be proxies for protected attributes (e.g., location codes, demographic indicators)
+3. **Class-Specific Bias**: Are certain features more important for predicting specific classes, indicating potential bias?
+4. **High-Importance Features**: Features with >15% importance should be examined closely for bias potential
+5. **Feature Interactions**: How do the top features relate to the protected attribute being analyzed?
+
+Key questions to answer:
+- Which features show the highest importance scores?
+- Are there features that could be demographic proxies?
+- Do importance patterns differ significantly between classes?
+- Are protected attributes themselves among the most important features?
+"""
     
     prompt += """
 
@@ -406,7 +417,10 @@ Please provide a comprehensive bias analysis including:
 
 2. **Specific Bias Patterns**: Identify any specific patterns of unfair treatment across different groups.
 
-3. **Feature Influence**: Analyze how protected attributes or their proxies influence predictions.
+3. **Feature Influence Analysis**: 
+   - Which features are most important for predictions?
+   - Are there any features that might be proxies for protected attributes?
+   - Do certain features show bias in their importance across groups?
 
 4. **Risk Assessment**: Evaluate the potential impact of detected biases.
 
@@ -430,11 +444,19 @@ def get_llm_bias_check_multi(protected_attr, analysis_summary, global_explanatio
     """Send the analysis summary and Global Explanations for a protected attribute to multiple LLMs and get bias detection responses."""
     results = {}
     
-    # Skip mistral_nemo if it's causing issues (can be enabled later)
-    skip_mistral = False  # Set to True to skip mistral_nemo
+    # Skip llama_3_3 if it's causing issues
+    skip_llama = False  # Set to False to enable llama_3_3
     
     for i, model in enumerate(llm_models):
-        # Skip mistral_nemo if flag is set
+        # Skip llama_3_3 if flag is set
+        if skip_llama and model == 'llama_3_3':
+            print(f"Skipping {model} bias check due to known 500 error issues...")
+            results[model] = {'error': f'{model} skipped due to known 500 error issues'}
+            continue
+            
+        # Skip mistral_nemo if it's causing issues (can be enabled later)
+        skip_mistral = False  # Set to True to skip mistral_nemo
+        
         if skip_mistral and model == 'mistral_nemo':
             print(f"Skipping {model} bias check due to known issues...")
             results[model] = {'error': f'{model} skipped due to known 500 error issues'}
@@ -443,10 +465,12 @@ def get_llm_bias_check_multi(protected_attr, analysis_summary, global_explanatio
         max_retries = 3
         retry_delay = 3  # Start with 3 seconds for bias checks
         
-        # Special handling for mistral_nemo - longer delay
-        if model == 'mistral_nemo':
-            print(f"Special handling for mistral_nemo bias check - adding extra delay...")
-            time.sleep(10)  # 10 second delay before mistral_nemo bias check
+        # Special handling for llama_3_3 - longer delay and more retries
+        if model == 'llama_3_3':
+            print(f"Special handling for llama_3_3 bias check - adding extra delay...")
+            time.sleep(10)  # 10 second delay before llama_3_3
+            max_retries = 5  # More retries for llama_3_3
+            retry_delay = 8  # Longer initial delay
         
         for attempt in range(max_retries):
             try:
@@ -470,7 +494,16 @@ def get_llm_bias_check_multi(protected_attr, analysis_summary, global_explanatio
                     results[model] = {'error': f"Network error for {model} after {max_retries} attempts: {str(e)}"}
             except Exception as e:
                 print(f"Error getting bias check from {model} (attempt {attempt + 1}): {str(e)}")
-                if attempt < max_retries - 1:
+                # Check if it's an HTTP 500 error
+                if "HTTP 500" in str(e) and model == 'llama_3_3':
+                    print(f"HTTP 500 error from {model} - this might be temporary, will retry...")
+                    if attempt < max_retries - 1:
+                        retry_delay *= 2  # Exponential backoff
+                        time.sleep(retry_delay)  # Extra delay for 500 errors
+                        continue
+                    else:
+                        results[model] = {'error': f"HTTP 500 error from {model} after {max_retries} attempts - service may be temporarily unavailable"}
+                elif attempt < max_retries - 1:
                     retry_delay *= 2  # Exponential backoff
                     continue
                 else:
@@ -528,7 +561,16 @@ def get_llm_recommendations_multi(columns_description, df, llm_models=['llama_3_
                     results[model] = {'error': f"Network error for {model} after {max_retries} attempts: {str(e)}"}
             except Exception as e:
                 print(f"Error getting recommendations from {model} (attempt {attempt + 1}): {str(e)}")
-                if attempt < max_retries - 1:
+                # Check if it's an HTTP 500 error
+                if "HTTP 500" in str(e) and model == 'llama_3_3':
+                    print(f"HTTP 500 error from {model} - this might be temporary, will retry...")
+                    if attempt < max_retries - 1:
+                        retry_delay *= 2  # Exponential backoff
+                        time.sleep(retry_delay)  # Extra delay for 500 errors
+                        continue
+                    else:
+                        results[model] = {'error': f"HTTP 500 error from {model} after {max_retries} attempts - service may be temporarily unavailable"}
+                elif attempt < max_retries - 1:
                     retry_delay *= 2  # Exponential backoff
                     continue
                 else:

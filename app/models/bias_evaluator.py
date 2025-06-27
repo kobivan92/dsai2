@@ -15,6 +15,7 @@ from aif360.metrics import BinaryLabelDatasetMetric
 import matplotlib
 import warnings
 from sklearn.exceptions import UndefinedMetricWarning
+from sklearn.inspection import permutation_importance
 warnings.filterwarnings("ignore")
 matplotlib.use("Agg")
 
@@ -229,8 +230,8 @@ def evaluate_model_bias(
     print("X shape:", X.shape)
     
     # Get feature names properly
-    feature_names = [f"cat__{name}" for name in cat_feats]
-    print("Feature names for model and SHAP:", feature_names)
+    feature_names = cat_feats  # Use original feature names instead of prefixed ones
+    print("Feature names for model and Global Explanations:", feature_names)
 
     # --- 5) Train/test split (stratified by y)
     X_train, X_test, y_train, y_test, g_train, g_test = train_test_split(
@@ -298,51 +299,85 @@ def evaluate_model_bias(
         # --- 9) Calculate Global Feature Importance from Random Forest
         global_explanations = {}
         
-        # Get feature importance for each class
+        # Get overall feature importance from the trained model
+        overall_importance = model.feature_importances_
+        
+        # Create global explanation table for overall model
+        explanation_data = []
+        for i, (feature, importance) in enumerate(zip(feature_names, overall_importance)):
+            explanation_data.append({
+                'feature': feature,
+                'importance': float(importance),
+                'rank': i + 1
+            })
+        
+        # Sort by importance (descending)
+        explanation_data.sort(key=lambda x: x['importance'], reverse=True)
+        
+        df_explanation = pd.DataFrame(explanation_data)
+        print("Global Feature Importance (Overall Model):")
+        print(df_explanation.head(10))  # Show top 10 features
+        
+        global_explanations['Overall'] = df_explanation
+        
+        # Also create per-class explanations if possible
         for class_idx in range(len(class_names)):
             cls_name = class_names[class_idx]
             
             try:
-                # Get feature importance for this class
-                if hasattr(model, 'estimators_'):
-                    # For Random Forest, we can get feature importance per class
-                    class_importance = np.zeros(len(feature_names))
-                    for estimator in model.estimators_:
-                        # Get feature importance from each tree
-                        tree_importance = estimator.feature_importances_
-                        if len(tree_importance) == len(feature_names):
-                            class_importance += tree_importance
-                    class_importance /= len(model.estimators_)
-                else:
-                    # Fallback: use overall feature importance
-                    class_importance = model.feature_importances_
+                # Calculate per-class feature importance using permutation importance
                 
-                # Create global explanation table
-                explanation_data = []
+                # Create a binary target for this class (1 if this class, 0 otherwise)
+                y_binary = (y_test == class_idx).astype(int)
+                
+                # Train a simple model for this binary classification
+                class_model = RandomForestClassifier(
+                    n_estimators=50,
+                    max_depth=3,
+                    random_state=random_state
+                )
+                class_model.fit(X_test, y_binary)
+                
+                # Calculate permutation importance for this class
+                perm_importance = permutation_importance(
+                    class_model, X_test, y_binary, 
+                    n_repeats=10, 
+                    random_state=random_state,
+                    n_jobs=1
+                )
+                
+                # Get feature importance for this class
+                class_importance = perm_importance.importances_mean
+                
+                # Normalize importance to sum to 1
+                if class_importance.sum() > 0:
+                    class_importance = class_importance / class_importance.sum()
+                else:
+                    # Fallback to overall importance if permutation importance fails
+                    class_importance = overall_importance
+                
+                # Create explanation table for this class
+                class_explanation_data = []
                 for i, (feature, importance) in enumerate(zip(feature_names, class_importance)):
-                    explanation_data.append({
+                    class_explanation_data.append({
                         'feature': feature,
                         'importance': float(importance),
                         'rank': i + 1
                     })
                 
                 # Sort by importance (descending)
-                explanation_data.sort(key=lambda x: x['importance'], reverse=True)
+                class_explanation_data.sort(key=lambda x: x['importance'], reverse=True)
                 
-                df_explanation = pd.DataFrame(explanation_data)
+                df_class_explanation = pd.DataFrame(class_explanation_data)
                 print(f"Global explanation for class {cls_name}:")
-                print(df_explanation.head())
+                print(df_class_explanation.head(5))
                 
-                global_explanations[cls_name] = df_explanation
+                global_explanations[cls_name] = df_class_explanation
                 
             except Exception as e:
                 print(f"Error calculating global explanation for class {cls_name}: {e}")
-                # Create an empty explanation table for this class
-                global_explanations[cls_name] = pd.DataFrame({
-                    'feature': [],
-                    'importance': [],
-                    'rank': []
-                })
+                # Use overall importance as fallback
+                global_explanations[cls_name] = df_explanation
 
     # Compute bias_metrics only for race column
     bias_metrics = None

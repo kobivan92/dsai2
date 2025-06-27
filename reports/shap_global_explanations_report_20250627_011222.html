@@ -1,0 +1,338 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHAP Global Explanations Report - NYPD_Complaint_Data_Historic_20250515_preprocessed.csv</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .feature-table {
+            font-size: 0.9rem;
+        }
+        .importance-high {
+            background-color: #d4edda !important;
+            font-weight: bold;
+        }
+        .importance-medium {
+            background-color: #fff3cd !important;
+        }
+        .importance-low {
+            background-color: #f8f9fa !important;
+        }
+        .class-header {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 15px;
+            border-radius: 8px 8px 0 0;
+            margin-bottom: 0;
+        }
+        .report-header {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .stats-card {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .shap-badge {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .fallback-badge {
+            background: linear-gradient(135deg, #6c757d, #495057);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="report-header text-center">
+            <h1><i class="fas fa-chart-bar"></i> SHAP Global Explanations Report</h1>
+            <p class="lead mb-0">SHAP Feature Importance Analysis for Machine Learning Model</p>
+            <span class="shap-badge mt-2">Powered by SHAP</span>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="stats-card">
+                    <h5><i class="fas fa-file-alt"></i> Dataset Information</h5>
+                    <p><strong>Filename:</strong> NYPD_Complaint_Data_Historic_20250515_preprocessed.csv</p>
+                    <p><strong>Total Rows:</strong> 10,000</p>
+                    <p><strong>Total Columns:</strong> 25</p>
+                    <p><strong>Target Column:</strong> <code>LAW_CAT_CD</code></p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="stats-card">
+                    <h5><i class="fas fa-shield-alt"></i> Protected Attributes</h5>
+                    <p><strong>Analyzed Attributes:</strong></p>
+                    <ul>
+                        <li><code>SUSP_RACE</code></li><li><code>SUSP_SEX</code></li><li><code>SUSP_AGE_GROUP</code></li><li><code>VIC_RACE</code></li><li><code>VIC_SEX</code></li><li><code>VIC_AGE_GROUP</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="stats-card">
+                    <h5><i class="fas fa-info-circle"></i> Analysis Summary</h5>
+                    <p><strong>Generated:</strong> 2025-06-27 01:12:22</p>
+                    <p><strong>Classes Analyzed:</strong> 3</p>
+                    <p><strong>Classes:</strong> FELONY, MISDEMEANOR, VIOLATION</p>
+                    <p><strong>Method:</strong> SHAP TreeExplainer with Random Forest</p>
+                    
+                </div>
+            </div>
+        </div>
+    
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="class-header">
+                        <h3 class="mb-0"><i class="fas fa-list-ol"></i> FELONY</h3>
+                        <small>SHAP Feature Importance - Top 6 Most Important Features</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover feature-table mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th width="8%">Rank</th>
+                                        <th width="50%">Feature Name</th>
+                                        <th width="20%">SHAP Importance</th>
+                                        <th width="22%">Percentage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">1</span></td>
+                                        <td><code class="fs-6">SUSP_SEX</code></td>
+                                        <td><strong>0.0436</strong></td>
+                                        <td><span class="badge bg-primary">20.6%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">2</span></td>
+                                        <td><code class="fs-6">SUSP_RACE</code></td>
+                                        <td><strong>0.0396</strong></td>
+                                        <td><span class="badge bg-primary">18.7%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">3</span></td>
+                                        <td><code class="fs-6">VIC_SEX</code></td>
+                                        <td><strong>0.0379</strong></td>
+                                        <td><span class="badge bg-primary">17.9%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">4</span></td>
+                                        <td><code class="fs-6">VIC_AGE_GROUP</code></td>
+                                        <td><strong>0.0372</strong></td>
+                                        <td><span class="badge bg-primary">17.6%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">5</span></td>
+                                        <td><code class="fs-6">SUSP_AGE_GROUP</code></td>
+                                        <td><strong>0.0284</strong></td>
+                                        <td><span class="badge bg-primary">13.4%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">6</span></td>
+                                        <td><code class="fs-6">VIC_RACE</code></td>
+                                        <td><strong>0.0248</strong></td>
+                                        <td><span class="badge bg-primary">11.7%</span></td>
+                                    </tr>
+                
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="class-header">
+                        <h3 class="mb-0"><i class="fas fa-list-ol"></i> MISDEMEANOR</h3>
+                        <small>SHAP Feature Importance - Top 6 Most Important Features</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover feature-table mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th width="8%">Rank</th>
+                                        <th width="50%">Feature Name</th>
+                                        <th width="20%">SHAP Importance</th>
+                                        <th width="22%">Percentage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">1</span></td>
+                                        <td><code class="fs-6">SUSP_RACE</code></td>
+                                        <td><strong>0.0629</strong></td>
+                                        <td><span class="badge bg-primary">26.2%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">2</span></td>
+                                        <td><code class="fs-6">VIC_SEX</code></td>
+                                        <td><strong>0.0446</strong></td>
+                                        <td><span class="badge bg-primary">18.6%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">3</span></td>
+                                        <td><code class="fs-6">VIC_AGE_GROUP</code></td>
+                                        <td><strong>0.0431</strong></td>
+                                        <td><span class="badge bg-primary">18.0%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">4</span></td>
+                                        <td><code class="fs-6">SUSP_SEX</code></td>
+                                        <td><strong>0.0380</strong></td>
+                                        <td><span class="badge bg-primary">15.8%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">5</span></td>
+                                        <td><code class="fs-6">VIC_RACE</code></td>
+                                        <td><strong>0.0283</strong></td>
+                                        <td><span class="badge bg-primary">11.8%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">6</span></td>
+                                        <td><code class="fs-6">SUSP_AGE_GROUP</code></td>
+                                        <td><strong>0.0230</strong></td>
+                                        <td><span class="badge bg-primary">9.6%</span></td>
+                                    </tr>
+                
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="class-header">
+                        <h3 class="mb-0"><i class="fas fa-list-ol"></i> VIOLATION</h3>
+                        <small>SHAP Feature Importance - Top 6 Most Important Features</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover feature-table mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th width="8%">Rank</th>
+                                        <th width="50%">Feature Name</th>
+                                        <th width="20%">SHAP Importance</th>
+                                        <th width="22%">Percentage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">1</span></td>
+                                        <td><code class="fs-6">SUSP_SEX</code></td>
+                                        <td><strong>0.0707</strong></td>
+                                        <td><span class="badge bg-primary">31.2%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">2</span></td>
+                                        <td><code class="fs-6">SUSP_RACE</code></td>
+                                        <td><strong>0.0489</strong></td>
+                                        <td><span class="badge bg-primary">21.6%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-high">
+                                        <td><span class="badge bg-secondary">3</span></td>
+                                        <td><code class="fs-6">VIC_SEX</code></td>
+                                        <td><strong>0.0378</strong></td>
+                                        <td><span class="badge bg-primary">16.7%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">4</span></td>
+                                        <td><code class="fs-6">SUSP_AGE_GROUP</code></td>
+                                        <td><strong>0.0331</strong></td>
+                                        <td><span class="badge bg-primary">14.6%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-medium">
+                                        <td><span class="badge bg-secondary">5</span></td>
+                                        <td><code class="fs-6">VIC_AGE_GROUP</code></td>
+                                        <td><strong>0.0202</strong></td>
+                                        <td><span class="badge bg-primary">8.9%</span></td>
+                                    </tr>
+                
+                                    <tr class="importance-low">
+                                        <td><span class="badge bg-secondary">6</span></td>
+                                        <td><code class="fs-6">VIC_RACE</code></td>
+                                        <td><strong>0.0160</strong></td>
+                                        <td><span class="badge bg-primary">7.1%</span></td>
+                                    </tr>
+                
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-lightbulb"></i> Understanding SHAP Feature Importance</h5>
+                    <ul class="mb-0">
+                        <li><strong>SHAP Values:</strong> Show how much each feature contributes to model predictions</li>
+                        <li><strong>High Importance (>15%):</strong> Features that heavily influence model predictions</li>
+                        <li><strong>Medium Importance (8-15%):</strong> Features with moderate influence</li>
+                        <li><strong>Low Importance (<8%):</strong> Features with minimal influence</li>
+                        <li><strong>Method:</strong> TreeExplainer with Random Forest classifier</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="text-center text-muted mt-5">
+            <p>Generated by SHAP Global Explanations Report Generator</p>
+            <p><small>This report shows SHAP-based feature importance for predicting the target variable across different classes.</small></p>
+        </footer>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+    

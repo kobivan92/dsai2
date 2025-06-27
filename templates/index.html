@@ -175,28 +175,26 @@
                 const resultsContent = document.getElementById('results-content');
                 resultsContent.innerHTML = '';
                 
-                // Add summary bias level
-                if (data.results && Object.keys(data.results).length > 0) {
+                // Show overall summary if we have multiple attributes
+                if (Object.keys(data.results).length > 1) {
                     const summaryDiv = document.createElement('div');
-                    summaryDiv.className = 'alert alert-info mb-4';
                     
-                    // Calculate overall bias level
+                    // Count bias levels
+                    const biasCounts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
                     let maxBiasLevel = 'LOW';
-                    let biasCounts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
                     
-                    for (const [attr, result] of Object.entries(data.results)) {
+                    for (const result of Object.values(data.results)) {
                         if (result.bias_metrics) {
                             for (const metric of result.bias_metrics) {
                                 const level = metric.Bias_Level || 'LOW';
-                                biasCounts[level]++;
+                                biasCounts[level] = (biasCounts[level] || 0) + 1;
+                                if (level === 'CRITICAL' || (level === 'HIGH' && maxBiasLevel !== 'CRITICAL') || 
+                                    (level === 'MEDIUM' && maxBiasLevel === 'LOW')) {
+                                    maxBiasLevel = level;
+                                }
                             }
                         }
                     }
-                    
-                    // Determine overall level
-                    if (biasCounts.CRITICAL > 0) maxBiasLevel = 'CRITICAL';
-                    else if (biasCounts.HIGH > 0) maxBiasLevel = 'HIGH';
-                    else if (biasCounts.MEDIUM > 0) maxBiasLevel = 'MEDIUM';
                     
                     let summaryClass = 'alert-info';
                     if (maxBiasLevel === 'HIGH') summaryClass = 'alert-warning';
@@ -213,7 +211,18 @@
                     `;
                     resultsContent.appendChild(summaryDiv);
                 }
-
+                
+                // Debug section to show all received data
+                const debugDiv = document.createElement('div');
+                debugDiv.className = 'alert alert-secondary mb-4';
+                debugDiv.innerHTML = `
+                    <h4><i class="fas fa-bug"></i> Debug Information</h4>
+                    <p><strong>Number of attributes analyzed:</strong> ${Object.keys(data.results).length}</p>
+                    <p><strong>Attributes:</strong> ${Object.keys(data.results).join(', ')}</p>
+                    <details><summary>Raw Response Data (Click to expand)</summary><pre class="bg-light p-2 mt-2">${JSON.stringify(data, null, 2)}</pre></details>
+                `;
+                resultsContent.appendChild(debugDiv);
+                
                 for (const [attr, result] of Object.entries(data.results)) {
                     const attrDiv = document.createElement('div');
                     attrDiv.className = 'mb-4';
@@ -245,6 +254,76 @@
                         </table>
                     `;
                     
+                    // Global Explanations
+                    const globalExplanationsDiv = document.createElement('div');
+                    globalExplanationsDiv.className = 'mb-4'; // Add margin for visibility
+                    
+                    // Debug: Show what we received
+                    console.log(`Global explanations for ${attr}:`, result.global_explanations);
+                    console.log(`Raw result data for ${attr}:`, result);
+                    console.log(`Number of global explanation classes:`, result.global_explanations ? Object.keys(result.global_explanations).length : 0);
+                    
+                    if (result.global_explanations && Object.keys(result.global_explanations).length > 0) {
+                        let globalExplanationsHTML = `<h3><i class="fas fa-chart-bar"></i> ${attr} - Global Feature Importance Analysis</h3>`;
+                        
+                        // Debug info
+                        globalExplanationsHTML += `<div class="alert alert-success mb-3"><strong>✓ SUCCESS:</strong> Found ${Object.keys(result.global_explanations).length} classes: ${Object.keys(result.global_explanations).join(', ')}</div>`;
+                        
+                        // Show raw data for debugging
+                        globalExplanationsHTML += `<details class="mb-3"><summary>Raw Global Explanations Data (Click to expand)</summary><pre class="bg-light p-2">${JSON.stringify(result.global_explanations, null, 2)}</pre></details>`;
+                        
+                        for (const [className, explanations] of Object.entries(result.global_explanations)) {
+                            console.log(`Processing class ${className} with ${explanations ? explanations.length : 'no'} explanations`);
+                            if (explanations && explanations.length > 0) {
+                                globalExplanationsHTML += `
+                                    <div class="card mb-4 border-primary">
+                                        <div class="card-header bg-primary text-white">
+                                            <h4 class="mb-0"><i class="fas fa-list-ol"></i> ${className}</h4>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="table-responsive">
+                                                <table class="table table-striped table-hover">
+                                                    <thead class="table-dark">
+                                                        <tr>
+                                                            <th width="10%">Rank</th>
+                                                            <th width="40%">Feature</th>
+                                                            <th width="25%">Importance Score</th>
+                                                            <th width="25%">Percentage</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${explanations.slice(0, 10).map((exp, idx) => {
+                                                            const percentage = (exp.importance * 100).toFixed(2);
+                                                            let rowClass = '';
+                                                            if (idx === 0) rowClass = 'table-warning fw-bold'; // Top feature
+                                                            else if (idx < 3) rowClass = 'table-info'; // Top 3
+                                                            return `
+                                                                <tr class="${rowClass}">
+                                                                    <td><span class="badge bg-secondary">${exp.rank}</span></td>
+                                                                    <td><code class="fs-6">${exp.feature}</code></td>
+                                                                    <td><strong>${exp.importance.toFixed(4)}</strong></td>
+                                                                    <td><span class="badge bg-primary">${percentage}%</span></td>
+                                                                </tr>
+                                                            `;
+                                                        }).join('')}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            ${explanations.length > 10 ? `<p class="text-muted mt-2"><i class="fas fa-info-circle"></i> Showing top 10 of ${explanations.length} features</p>` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            } else {
+                                globalExplanationsHTML += `<div class="alert alert-warning">No explanations available for class: ${className}</div>`;
+                            }
+                        }
+                        globalExplanationsDiv.innerHTML = globalExplanationsHTML;
+                        console.log(`Global Explanations HTML generated for ${attr}`);
+                    } else {
+                        globalExplanationsDiv.innerHTML = `<h3><i class="fas fa-exclamation-triangle"></i> ${attr} - Global Feature Importance Analysis</h3><div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> No global explanations available for this attribute. DEBUG: ${JSON.stringify(result.global_explanations)}</div>`;
+                        console.log(`No Global Explanations found for ${attr}`);
+                    }
+                    
                     // Group-wise metrics
                     const groupDiv = document.createElement('div');
                     groupDiv.innerHTML = `
@@ -272,39 +351,6 @@
                             </tbody>
                         </table>
                     `;
-
-                    // Global Explanations
-                    const globalExplanationsDiv = document.createElement('div');
-                    if (result.global_explanations) {
-                        let globalExplanationsHTML = `<h3>${attr} - Global Feature Importance</h3>`;
-                        
-                        for (const [className, explanations] of Object.entries(result.global_explanations)) {
-                            globalExplanationsHTML += `
-                                <h4>Class: ${className}</h4>
-                                <table class="table table-bordered">
-                                    <thead>
-                                        <tr>
-                                            <th>Feature</th>
-                                            <th>Importance</th>
-                                            <th>Rank</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${explanations.map(exp => `
-                                            <tr>
-                                                <td>${exp.feature}</td>
-                                                <td>${exp.importance.toFixed(4)}</td>
-                                                <td>${exp.rank}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            `;
-                        }
-                        globalExplanationsDiv.innerHTML = globalExplanationsHTML;
-                    } else {
-                        globalExplanationsDiv.innerHTML = `<h3>${attr} - Global Feature Importance</h3><p>No global explanations available.</p>`;
-                    }
 
                     // LLM Bias Analysis
                     const llmDiv = document.createElement('div');
@@ -372,9 +418,9 @@
                     }
 
                     attrDiv.appendChild(overallDiv);
+                    attrDiv.appendChild(globalExplanationsDiv);
                     attrDiv.appendChild(groupDiv);
                     attrDiv.appendChild(biasMetricsDiv);
-                    attrDiv.appendChild(globalExplanationsDiv);
                     attrDiv.appendChild(llmDiv);
                     resultsContent.appendChild(attrDiv);
                 }
