@@ -1,70 +1,134 @@
-# Global Explanations Report Generator
+# 📊 SHAP Global Explanations Report Generator
 
-This tool automatically generates beautiful, standalone HTML reports with Global Explanations whenever you upload a new CSV file.
+A powerful standalone tool that automatically generates beautiful HTML reports with SHAP Global Explanations for bias analysis. This tool works independently or alongside the main bias detection system to provide detailed feature importance analysis.
 
-## Features
+## 🎯 **Overview**
 
-- 🎯 **Automatic Detection**: Monitors the uploads directory for new CSV files
-- 📊 **Global Explanations**: Shows feature importance for each class
-- 🎨 **Beautiful Reports**: Professional HTML reports with Bootstrap styling
-- 📱 **Responsive Design**: Works on desktop and mobile devices
-- 🔄 **Real-time Generation**: Creates reports automatically when files are uploaded
+The Report Generator creates professional, standalone HTML reports showing how demographic features influence model predictions using SHAP (SHapley Additive exPlanations) values. Perfect for bias analysis, model interpretability, and stakeholder presentations.
 
-## Quick Start
+## 🚀 **Key Features**
 
-### Option 1: Automatic Monitoring (Recommended)
+### **🤖 SHAP-Based Analysis**
+- **True SHAP Values**: Uses SHAP TreeExplainer with Random Forest
+- **Per-Class Analysis**: Separate feature importance for each target class
+- **Feature Ranking**: Top features that influence predictions
+- **Importance Percentages**: Relative contribution of each feature
 
-1. **Start the monitoring service**:
-   ```bash
-   python auto_generate_report.py
-   ```
+### **📋 Automated Processing**
+- **Smart Feature Selection**: Focuses on demographic attributes
+- **Automatic Detection**: Monitors uploads directory for new files
+- **Error Handling**: Graceful fallback to feature importance
+- **Sample Optimization**: Uses 500 samples for efficient SHAP calculation
 
-2. **Upload a CSV file** to the `uploads` directory (or use the main app)
+### **🎨 Professional Reports**
+- **Bootstrap Styling**: Modern, responsive design
+- **Color-Coded Importance**: Visual indicators for feature importance
+- **Standalone HTML**: No dependencies, works offline
+- **Print-Ready**: Perfect for documentation and presentations
 
-3. **Report is automatically generated** and opened in your browser
+## 🏗️ **How It Works**
 
-### Option 2: Manual Generation
+```
+📁 CSV Dataset Upload
+    │
+    ▼
+🔍 LLM Column Analysis
+    │
+    ▼
+🎯 Feature Selection (Demographic Only)
+    │
+    ▼
+🤖 SHAP Calculation
+    │
+    ▼
+📊 Report Generation
+    │
+    ▼
+🌐 HTML Report (Standalone)
+```
+
+## 🛠️ **Installation**
+
+### **1. Install Dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+### **2. Configure LLM Endpoints** (if using LLM analysis)
+Edit `app/config.py` with your API keys:
+```python
+LLM_ENDPOINTS = {
+    'llama_3_3': {
+        'url': 'https://api.groq.com/openai/v1/chat/completions',
+        'headers': {'Authorization': 'Bearer YOUR_API_KEY'}
+    }
+}
+```
+
+## 📖 **Usage Guide**
+
+### **Option 1: Manual Report Generation**
 
 Generate a report for a specific file:
 
 ```bash
-python generate_global_explanations_report.py your_file.csv
+# Basic usage
+python generate_global_explanations_report.py your_dataset.csv
+
+# With options
+python generate_global_explanations_report.py your_dataset.csv --n-rows 1000 --test-size 0.2
 ```
 
-**Options**:
+**Available Options:**
 - `--n-rows 1000`: Limit analysis to first 1000 rows
-- `--test-size 0.2`: Set test size (default: 0.2)
-- `--max-categories 50`: Set max categories (default: 50)
-- `--output-dir reports`: Set output directory
+- `--test-size 0.2`: Set test size for model evaluation (default: 0.2)
+- `--max-categories 50`: Maximum categories for categorical features
+- `--output-dir reports`: Set output directory for reports
 
-## Report Features
+### **Option 2: Automatic Monitoring**
 
-### 📋 Dataset Information
-- File details (name, rows, columns)
-- Target column identification
-- Protected attributes analysis
+Start the monitoring service to automatically generate reports:
 
-### 📊 Global Explanations
-- **Per-class analysis**: Separate tables for each class
-- **Feature ranking**: Top 10 most important features per class
-- **Importance scores**: Numerical and percentage values
-- **Color coding**: 
-  - 🟢 High importance (>20%)
-  - 🟡 Medium importance (10-20%)
-  - ⚪ Low importance (<10%)
+```bash
+python auto_generate_report.py
+```
 
-### 🎨 Visual Design
-- Professional Bootstrap styling
-- Responsive tables
-- Color-coded importance levels
-- Icons and badges for better UX
+**What happens:**
+1. Monitors the `uploads/` directory for new CSV files
+2. Automatically generates SHAP reports when files are uploaded
+3. Opens reports in your default browser
+4. Saves reports with timestamps
 
-## File Structure
+## 📊 **Report Content**
+
+### **📋 Dataset Information**
+- **File Details**: Name, rows, columns
+- **Target Column**: Automatically detected by LLM
+- **Protected Attributes**: Demographic features analyzed
+- **Generation Timestamp**: When the report was created
+
+### **📈 SHAP Global Explanations**
+- **Per-Class Tables**: Separate analysis for each target class
+- **Feature Rankings**: Top 10 most important features per class
+- **SHAP Values**: Actual SHAP importance scores
+- **Importance Percentages**: Relative contribution of each feature
+- **Color Coding**:
+  - 🟢 **High Importance** (>15%): Heavily influences predictions
+  - 🟡 **Medium Importance** (8-15%): Moderate influence
+  - ⚪ **Low Importance** (<8%): Minimal influence
+
+### **🎨 Visual Design**
+- **Professional Layout**: Bootstrap-based responsive design
+- **Color-Coded Rows**: Visual importance indicators
+- **Badges and Icons**: Clear visual hierarchy
+- **Print-Friendly**: Optimized for printing and PDF export
+
+## 📁 **File Structure**
 
 ```
 reports/
-├── global_explanations_report_20241201_143022.html
-├── global_explanations_report_20241201_143156.html
+├── shap_global_explanations_report_20241201_143022.html
+├── shap_global_explanations_report_20241201_143156.html
 └── ...
 
 uploads/
@@ -72,68 +136,154 @@ uploads/
 └── another_dataset.csv
 ```
 
-## Example Usage
+## 🔧 **Configuration**
 
-1. **Start monitoring**:
-   ```bash
-   python auto_generate_report.py
-   ```
+### **Feature Selection**
+The system focuses on these demographic features:
+```python
+allowed_features = [
+    'SUSP_RACE', 'SUSP_SEX', 'SUSP_AGE_GROUP',
+    'VIC_RACE', 'VIC_SEX', 'VIC_AGE_GROUP'
+]
+```
 
-2. **Upload a file** through the main app or copy to uploads directory
+### **SHAP Settings**
+- **Sample Size**: 500 samples (configurable)
+- **Model**: Random Forest with 100 estimators
+- **Explainer**: SHAP TreeExplainer
+- **Fallback**: Feature importance if SHAP fails
 
-3. **Report is automatically generated** with timestamp:
-   ```
-   ✅ Report generated: reports/global_explanations_report_20241201_143022.html
-   🌐 Report opened in browser
-   ```
+## 📊 **Example Output**
 
-## Report Content
+### **Report Header**
+```
+SHAP Global Explanations Report
+SHAP Feature Importance Analysis for Machine Learning Model
+[Powered by SHAP]
+```
 
-Each report includes:
+### **Dataset Summary**
+```
+Dataset Information:
+- Filename: NYPD_Complaint_Data_Historic_20250515_preprocessed.csv
+- Total Rows: 10,000
+- Total Columns: 35
+- Target Column: LAW_CAT_CD
+```
 
-1. **Header Section**
-   - Report title and description
-   - Generation timestamp
+### **Feature Importance Table**
+```
+Rank | Feature        | SHAP Importance | Percentage
+-----|----------------|-----------------|------------
+1    | SUSP_RACE      | 0.2345         | 23.5%
+2    | SUSP_SEX       | 0.1892         | 18.9%
+3    | VIC_RACE       | 0.1567         | 15.7%
+...
+```
 
-2. **Dataset Summary**
-   - File information
-   - Row and column counts
-   - Target column
-   - Protected attributes
+## 🔍 **Supported Datasets**
 
-3. **Global Explanations Tables**
-   - One table per class
-   - Feature rankings
-   - Importance scores
-   - Percentage values
+### **Law Enforcement Data**
+- **NYPD Crime Data**: Tested and optimized
+- **LAPD Crime Data**: Compatible format
+- **Any Crime Dataset**: With demographic columns
 
-4. **Legend**
-   - Explanation of importance levels
-   - Understanding guide
+### **Required Columns**
+- **Demographic Features**: Race, sex, age columns
+- **Target Variable**: Crime categories, outcomes, etc.
+- **Format**: CSV with headers
 
-## Troubleshooting
+## 🆘 **Troubleshooting**
 
-### Report not generating?
-- Check if the file is a valid CSV
-- Ensure the file is completely uploaded
-- Check console for error messages
+### **Common Issues**
 
-### Report looks empty?
-- The dataset might not have enough data
-- Check if target column was identified correctly
-- Verify protected attributes were found
+**SHAP Calculation Fails**
+```
+❌ Error: Per-column arrays must each be 1-dimensional
+```
+**Solution**: System automatically falls back to feature importance
 
-### Performance issues?
-- Use `--n-rows` to limit dataset size
-- Reduce `--max-categories` for large datasets
-- Consider using smaller test size
+**Memory Issues**
+```
+❌ Error: Out of memory
+```
+**Solution**: Use `--n-rows 1000` to limit dataset size
 
-## Integration with Main App
+**LLM API Errors**
+```
+❌ Error: API key invalid
+```
+**Solution**: Check API keys in `app/config.py`
 
-The report generator works alongside the main Flask app:
+### **Performance Tips**
 
-1. **Main app**: Upload files and get bias analysis
-2. **Report generator**: Automatically creates standalone reports
-3. **Both**: Use the same uploads directory
+**Large Datasets**
+```bash
+# Limit rows for faster processing
+python generate_global_explanations_report.py large_file.csv --n-rows 5000
+```
 
-This gives you both the interactive web interface and beautiful offline reports! 
+**Multiple Reports**
+```bash
+# Start monitoring for automatic generation
+python auto_generate_report.py
+```
+
+**Report Customization**
+- Edit `allowed_features` in the script for different feature sets
+- Modify HTML templates for custom styling
+- Adjust SHAP sample size for speed vs. accuracy trade-off
+
+## 🔗 **Integration with Main System**
+
+### **Workflow**
+1. **Main App**: Upload files and get bias analysis
+2. **Report Generator**: Automatically creates SHAP reports
+3. **Both Systems**: Use the same uploads directory
+
+### **Benefits**
+- **Complementary Analysis**: Web interface + standalone reports
+- **Different Audiences**: Interactive vs. documentation
+- **Flexible Usage**: Use independently or together
+
+## 📈 **Advanced Usage**
+
+### **Custom Feature Sets**
+Edit the `allowed_features` list in the script:
+```python
+allowed_features = [
+    'YOUR_RACE_COL', 'YOUR_SEX_COL', 'YOUR_AGE_COL',
+    # Add your specific demographic columns
+]
+```
+
+### **Batch Processing**
+```bash
+# Process multiple files
+for file in uploads/*.csv; do
+    python generate_global_explanations_report.py "$file"
+done
+```
+
+### **Scheduled Reports**
+```bash
+# Run daily at 9 AM
+0 9 * * * cd /path/to/dsai2 && python auto_generate_report.py
+```
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create a feature branch
+3. Add new report features or styling
+4. Test with different datasets
+5. Submit a pull request
+
+## 📄 **License**
+
+This project is licensed under the MIT License.
+
+---
+
+**📊 Generate professional SHAP reports for bias analysis and model interpretability!** 
+ 

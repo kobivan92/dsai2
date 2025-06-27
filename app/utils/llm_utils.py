@@ -407,24 +407,24 @@ Key questions to answer:
     
     prompt += """
 
-Please provide a comprehensive bias analysis including:
+Please provide a comprehensive bias analysis with the following structure:
 
-1. **Bias Level Classification**: 
-   - LOW: Minimal bias detected (metrics within acceptable ranges)
-   - MEDIUM: Moderate bias detected (some concerning patterns)
-   - HIGH: Significant bias detected (clear unfair treatment)
-   - CRITICAL: Severe bias detected (major fairness violations)
+## KEY FINDINGS
+**Bias Level**: [LOW/MEDIUM/HIGH/CRITICAL]
+**Definition**: [Define what this bias level means in the context of this dataset and protected attribute]
+**Argumentation**: [Provide 3 sentences maximum explaining why this bias level was assigned based on the metrics and patterns observed]
 
-2. **Specific Bias Patterns**: Identify any specific patterns of unfair treatment across different groups.
+## DETAILED ANALYSIS
+1. **Specific Bias Patterns**: Identify any specific patterns of unfair treatment across different groups.
 
-3. **Feature Influence Analysis**: 
+2. **Feature Influence Analysis**: 
    - Which features are most important for predictions?
    - Are there any features that might be proxies for protected attributes?
    - Do certain features show bias in their importance across groups?
 
-4. **Risk Assessment**: Evaluate the potential impact of detected biases.
+3. **Risk Assessment**: Evaluate the potential impact of detected biases.
 
-Please format your response with clear sections for each of these points. Do not provide recommendations or mitigation steps - focus only on detection and analysis."""
+Please format your response with clear sections. Do not provide recommendations or mitigation steps - focus only on detection and analysis."""
     
     payload = {
         "messages": [

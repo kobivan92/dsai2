@@ -356,22 +356,207 @@
                     const llmDiv = document.createElement('div');
                     if (result.llm_bias_check) {
                         if (typeof result.llm_bias_check === 'object') {
-                            // Multi-LLM results
-                            let llmHTML = `<h3>${attr} - Multi-LLM Bias Analysis</h3>`;
-                            for (const [model, analysis] of Object.entries(result.llm_bias_check)) {
-                                if (analysis.error) {
-                                    llmHTML += `<h4>${model}</h4><p class="text-danger">Error: ${analysis.error}</p>`;
-                                } else {
-                                    llmHTML += `<h4>${model}</h4><p>${analysis}</p>`;
+                            // Multi-LLM results - Create comparison table
+                            let llmHTML = `<h3>${attr} - Multi-LLM Bias Analysis Comparison</h3>`;
+                            
+                            // Get AIF360 bias levels for this attribute
+                            const aifBiasLevels = [];
+                            if (result.bias_metrics && result.bias_metrics.length > 0) {
+                                for (const metric of result.bias_metrics) {
+                                    aifBiasLevels.push({
+                                        category: metric.Category,
+                                        level: metric.Bias_Level || 'UNKNOWN'
+                                    });
                                 }
                             }
+                            
+                            // Create comparison table
+                            llmHTML += `
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Category</th>
+                                                <th>Bias Level AIF</th>
+                                                <th>llama_3_3</th>
+                                                <th>deepseek_r1</th>
+                                                <th>mistral_nemo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            // Get unique categories from AIF360 metrics
+                            const categories = aifBiasLevels.length > 0 ? 
+                                [...new Set(aifBiasLevels.map(item => item.category))] : 
+                                ['Overall'];
+                            
+                            for (const category of categories) {
+                                // Get AIF360 bias level for this category
+                                const aifMetric = aifBiasLevels.find(item => item.category === category);
+                                const aifLevel = aifMetric ? aifMetric.level : 'N/A';
+                                
+                                // Get bias level colors
+                                const getBiasLevelColor = (level) => {
+                                    if (level === 'LOW') return 'success';
+                                    if (level === 'MEDIUM') return 'warning';
+                                    if (level === 'HIGH' || level === 'CRITICAL') return 'danger';
+                                    return 'secondary';
+                                };
+                                
+                                llmHTML += `<tr>`;
+                                llmHTML += `<td><strong>${category}</strong></td>`;
+                                llmHTML += `<td><span class="badge bg-${getBiasLevelColor(aifLevel)}">${aifLevel}</span></td>`;
+                                
+                                // Add LLM results
+                                const llmModels = ['llama_3_3', 'deepseek_r1', 'mistral_nemo'];
+                                for (const model of llmModels) {
+                                    const analysis = result.llm_bias_check[model];
+                                    if (analysis && !analysis.error) {
+                                        // Parse Key Findings for bias level
+                                        const keyFindingsMatch = analysis.match(/## KEY FINDINGS\s*\*\*Bias Level\*\*:\s*(\w+)/s);
+                                        if (keyFindingsMatch) {
+                                            const biasLevel = keyFindingsMatch[1];
+                                            llmHTML += `<td><span class="badge bg-${getBiasLevelColor(biasLevel)}">${biasLevel}</span></td>`;
+                                        } else {
+                                            llmHTML += `<td><span class="text-muted">N/A</span></td>`;
+                                        }
+                                    } else {
+                                        llmHTML += `<td><span class="text-danger">Error</span></td>`;
+                                    }
+                                }
+                                
+                                llmHTML += `</tr>`;
+                            }
+                            
+                            llmHTML += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                            
+                            // Add detailed analysis for each LLM
+                            llmHTML += `<h4 class="mt-4">Detailed Analysis by LLM</h4>`;
+                            for (const [model, analysis] of Object.entries(result.llm_bias_check)) {
+                                if (analysis.error) {
+                                    llmHTML += `
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-danger text-white">
+                                                <h5 class="mb-0">${model}</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="text-danger">Error: ${analysis.error}</p>
+                                            </div>
+                                        </div>
+                                    `;
+                                } else {
+                                    llmHTML += `<div class="card mb-3">`;
+                                    llmHTML += `<div class="card-header"><h5 class="mb-0">${model}</h5></div>`;
+                                    llmHTML += `<div class="card-body">`;
+                                    
+                                    // Parse Key Findings section
+                                    const keyFindingsMatch = analysis.match(/## KEY FINDINGS\s*\*\*Bias Level\*\*:\s*(\w+)\s*\*\*Definition\*\*:\s*([^*]+)\*\*Argumentation\*\*:\s*([^*]+)/s);
+                                    if (keyFindingsMatch) {
+                                        const biasLevel = keyFindingsMatch[1];
+                                        const definition = keyFindingsMatch[2].trim();
+                                        const argumentation = keyFindingsMatch[3].trim();
+                                        
+                                        llmHTML += `
+                                            <div class="row mb-3">
+                                                <div class="col-md-3">
+                                                    <p><strong>Bias Level:</strong></p>
+                                                    <span class="badge bg-${getBiasLevelColor(biasLevel)} fs-6">${biasLevel}</span>
+                                                </div>
+                                                <div class="col-md-9">
+                                                    <p><strong>Definition:</strong> ${definition}</p>
+                                                    <p><strong>Argumentation:</strong> ${argumentation}</p>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    
+                                    // Add detailed analysis if available
+                                    const detailedAnalysisMatch = analysis.match(/## DETAILED ANALYSIS\s*(.*)/s);
+                                    if (detailedAnalysisMatch) {
+                                        llmHTML += `
+                                            <details>
+                                                <summary><strong>Detailed Analysis</strong></summary>
+                                                <pre class="bg-light p-3 rounded mt-2">${detailedAnalysisMatch[1].trim()}</pre>
+                                            </details>
+                                        `;
+                                    } else {
+                                        // Fallback: show full analysis if parsing fails
+                                        llmHTML += `<pre class="bg-light p-3 rounded">${analysis}</pre>`;
+                                    }
+                                    
+                                    llmHTML += `</div></div>`;
+                                }
+                            }
+                            
                             llmDiv.innerHTML = llmHTML;
                         } else {
                             // Single LLM result
-                            llmDiv.innerHTML = `
-                                <h3>${attr} - LLM Bias Analysis</h3>
-                                <p>${result.llm_bias_check}</p>
-                            `;
+                            const analysis = result.llm_bias_check;
+                            
+                            // Parse Key Findings section
+                            const keyFindingsMatch = analysis.match(/## KEY FINDINGS\s*\*\*Bias Level\*\*:\s*(\w+)\s*\*\*Definition\*\*:\s*([^*]+)\*\*Argumentation\*\*:\s*([^*]+)/s);
+                            if (keyFindingsMatch) {
+                                const biasLevel = keyFindingsMatch[1];
+                                const definition = keyFindingsMatch[2].trim();
+                                const argumentation = keyFindingsMatch[3].trim();
+                                
+                                let biasClass = 'text-secondary';
+                                if (biasLevel === 'LOW') biasClass = 'text-success';
+                                else if (biasLevel === 'MEDIUM') biasClass = 'text-warning';
+                                else if (biasLevel === 'HIGH') biasClass = 'text-danger';
+                                else if (biasLevel === 'CRITICAL') biasClass = 'text-danger fw-bold';
+                                
+                                llmDiv.innerHTML = `
+                                    <h3>${attr} - LLM Bias Analysis</h3>
+                                    <div class="card mb-3 border-primary">
+                                        <div class="card-header bg-primary text-white">
+                                            <h5 class="mb-0"><i class="fas fa-key"></i> Key Findings</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-3">
+                                                    <p><strong>Bias Level:</strong></p>
+                                                    <span class="badge bg-${biasLevel === 'LOW' ? 'success' : biasLevel === 'MEDIUM' ? 'warning' : 'danger'} fs-6">${biasLevel}</span>
+                                                </div>
+                                                <div class="col-md-9">
+                                                    <p><strong>Definition:</strong> ${definition}</p>
+                                                    <p><strong>Argumentation:</strong> ${argumentation}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                
+                                // Add detailed analysis if available
+                                const detailedAnalysisMatch = analysis.match(/## DETAILED ANALYSIS\s*(.*)/s);
+                                if (detailedAnalysisMatch) {
+                                    llmDiv.innerHTML += `
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Detailed Analysis</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <pre class="bg-light p-3 rounded">${detailedAnalysisMatch[1].trim()}</pre>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                            } else {
+                                // Fallback: show full analysis if parsing fails
+                                llmDiv.innerHTML = `
+                                    <h3>${attr} - LLM Bias Analysis</h3>
+                                    <div class="card mb-3">
+                                        <div class="card-body">
+                                            <pre class="bg-light p-3 rounded">${analysis}</pre>
+                                        </div>
+                                    </div>
+                                `;
+                            }
                         }
                     } else {
                         llmDiv.innerHTML = `<h3>${attr} - LLM Bias Analysis</h3><p>No LLM analysis available.</p>`;
@@ -436,4 +621,3 @@
         });
     </script>
 </body>
-</html> 
