@@ -101,8 +101,7 @@ This system provides **automated bias detection** using three different LLMs (ll
 │  • Web Interface: Interactive bias analysis                               │
 │  • Standalone Reports: SHAP Global Explanations HTML                      │
 │  • Multi-LLM Comparison: Consensus analysis                               │
-│  • Bias Metrics: AIF360 fairness scores                                   │
-│  • Feature Importance: SHAP-based explanations                            │
+
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
