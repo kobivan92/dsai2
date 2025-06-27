@@ -1,5 +1,7 @@
 # 🤖 Multi-LLM Bias Detection & Analysis System
 
+**GitHub Repository**: [https://github.com/kobivan92/dsai2](https://github.com/kobivan92/dsai2)
+
 A comprehensive bias detection and analysis platform that uses multiple Large Language Models (LLMs) to identify, analyze, and report on biases in datasets. The system combines AIF360 fairness metrics, SHAP explanations, and multi-LLM insights for robust bias detection.
 
 ## 🎯 **System Overview**

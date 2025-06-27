@@ -368,6 +368,9 @@
                                         level: metric.Bias_Level || 'UNKNOWN'
                                     });
                                 }
+                                console.log(`AIF360 bias levels for ${attr}:`, aifBiasLevels);
+                            } else {
+                                console.log(`No AIF360 bias metrics found for ${attr}`);
                             }
                             
                             // Create comparison table

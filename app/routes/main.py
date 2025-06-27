@@ -98,12 +98,14 @@ def analyze():
             attr = attr.strip()
             if attr in df.columns:
                 # Reuse the same model and global explanations for all attributes
-                # Only recalculate bias metrics if needed
+                # Compute bias metrics for all protected attributes, not just race column
                 bias_metrics = None
                 if race_col is not None and privileged_list is not None and unprivileged_list is not None:
-                    if attr == race_col:
-                        bias_metrics = compute_bias_metrics(df, target_column, race_col, privileged_list, unprivileged_list)
+                    # Compute bias metrics for the current protected attribute
+                    # Use the current attr as the protected attribute for bias calculation
+                    bias_metrics = compute_bias_metrics(df, target_column, attr, privileged_list, unprivileged_list)
                 
+                # Store AIF metrics for LLM if this is the race column
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
                 
@@ -246,12 +248,14 @@ def analyze_multi():
             attr = attr.strip()
             if attr in df.columns:
                 # Reuse the same model and global explanations for all attributes
-                # Only recalculate bias metrics if needed
+                # Compute bias metrics for all protected attributes, not just race column
                 bias_metrics = None
                 if race_col is not None and privileged_list is not None and unprivileged_list is not None:
-                    if attr == race_col:
-                        bias_metrics = compute_bias_metrics(df, target_column, race_col, privileged_list, unprivileged_list)
+                    # Compute bias metrics for the current protected attribute
+                    # Use the current attr as the protected attribute for bias calculation
+                    bias_metrics = compute_bias_metrics(df, target_column, attr, privileged_list, unprivileged_list)
                 
+                # Store AIF metrics for LLM if this is the race column
                 if attr == race_col and bias_metrics is not None:
                     aif_metrics_for_llm = bias_metrics.to_dict('records')
                 

@@ -82,18 +82,19 @@ def classify_bias_level(statistical_parity_diff, disparate_impact, mean_diff):
 
 def compute_bias_metrics(df: pd.DataFrame,
                         target_col: str,
-                        race_col: str,
+                        protected_attr: str,
                         privileged_list: list,
                         unprivileged_list: list):
     """
     Compute bias metrics using AIF360 for each category in the target column.
+    Works with any protected attribute, not just race columns.
     """
-    # Filter to only those suspects whose race is in one of our two groups
-    mask = df[race_col].isin(privileged_list + unprivileged_list)
-    df_sub = df.loc[mask, [target_col, race_col]].copy()
+    # Filter to only those records whose protected attribute is in one of our two groups
+    mask = df[protected_attr].isin(privileged_list + unprivileged_list)
+    df_sub = df.loc[mask, [target_col, protected_attr]].copy()
     
-    # Create a numeric "prot_binary" column: 0 if race is privileged, 1 if unprivileged
-    df_sub["prot_binary"] = df_sub[race_col].apply(lambda r: 0 if r in privileged_list else 1)
+    # Create a numeric "prot_binary" column: 0 if protected_attr is privileged, 1 if unprivileged
+    df_sub["prot_binary"] = df_sub[protected_attr].apply(lambda r: 0 if r in privileged_list else 1)
     
     # Loop over each unique category in target column and compute bias metrics
     results = []
@@ -136,12 +137,12 @@ def compute_bias_metrics(df: pd.DataFrame,
         
         results.append({
             "Category": category,
-            "Privileged Rate": priv_rate,
-            "Unprivileged Rate": unpriv_rate,
-            "Statistical Parity Difference": spd,
-            "Disparate Impact": di,
-            "Mean Difference": md,
-            "Bias Level": bias_level
+            "Privileged_Rate": priv_rate,
+            "Unprivileged_Rate": unpriv_rate,
+            "Statistical_Parity_Difference": spd,
+            "Disparate_Impact": di,
+            "Mean_Difference": md,
+            "Bias_Level": bias_level
         })
     
     return pd.DataFrame(results)
@@ -379,10 +380,9 @@ def evaluate_model_bias(
                 # Use overall importance as fallback
                 global_explanations[cls_name] = df_explanation
 
-    # Compute bias_metrics only for race column
+    # Compute bias_metrics for the protected attribute
     bias_metrics = None
     if race_col is not None and privileged_list is not None and unprivileged_list is not None:
-        if protected_attr == race_col:
-            bias_metrics = compute_bias_metrics(df, target_col, race_col, privileged_list, unprivileged_list)
+        bias_metrics = compute_bias_metrics(df, target_col, protected_attr, privileged_list, unprivileged_list)
     
     return model, preprocessor, overall, group_report, global_explanations, bias_metrics
